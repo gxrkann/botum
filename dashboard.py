@@ -35,8 +35,12 @@ class Dashboard(commands.Cog):
         try:
             self.dashboard_thread = threading.Thread(target=self.run_dashboard, daemon=True)
             self.dashboard_thread.start()
+            msg = f"[DASHBOARD] Baslatildi -> http://0.0.0.0:{self.port}"
+            print(msg, flush=True)
             self.bot.logger.info(f"Dashboard started on port {self.port}")
         except Exception as e:
+            err = f"[DASHBOARD] BASLATILAMADI: {e}"
+            print(err, flush=True)
             self.bot.logger.error(f"Dashboard could not start: {e}")
 
     @commands.Cog.listener()
@@ -394,12 +398,14 @@ def api_bot_add(guild_id):
     return jsonify({'invite_url': invite_url, 'guild_name': guild.name})
 
 async def setup(bot):
+    print("[DASHBOARD] Cog yukleniyor...", flush=True)
     app.config['BOT'] = bot
     cog = Dashboard(bot)
     await bot.add_cog(cog)
+    print(f"[DASHBOARD] Port: {cog.port}, Bot hazir mi: {bot.is_ready()}", flush=True)
 
     # Bot cog yuklenmeden once hazirlandiysa on_ready tetiklenmez,
     # bu yuzden elle kontrol edip dashboard'u hemen baslat.
     if bot.is_ready():
-        await asyncio.sleep(0.5)  # bot loop'unu bekle
+        await asyncio.sleep(0.5)
         await cog.start_dashboard()
