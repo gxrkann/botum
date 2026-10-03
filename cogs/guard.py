@@ -180,26 +180,42 @@ class Guard(commands.Cog):
     @app_commands.checks.has_permissions(administrator=True)
     async def log_otomatik(self, interaction: discord.Interaction):
         """Tüm log kanallarını otomatik oluştur"""
-        # Discord 3 saniye zaman aşımı - hemen defer et
         await interaction.response.defer(ephemeral=True)
 
-        created_channels = []
         log_types = ['guard', 'mod', 'message', 'voice', 'member',
                      'silah_katlanan', 'silah_kaybedilen', 'farm']
 
-        for log_type in log_types:
+        progress = discord.Embed(
+            title="📋 Log Kanalları Oluşturuluyor",
+            description="Başlatılıyor...",
+            color=discord.Color.blue()
+        )
+        status = await interaction.followup.send(embed=progress, ephemeral=True)
+
+        created_channels = []
+        total = len(log_types)
+
+        for i, log_type in enumerate(log_types, 1):
+            progress.description = f"**{i}/{total}** oluşturuluyor: `{log_type}`\n\n" + \
+                                   ("\n".join(created_channels) if created_channels else "_Henüz başlanmadı_")
+            await status.edit(embed=progress)
+
             channel = await self.create_log_channel(interaction.guild, log_type)
             if channel:
                 await self.bot.db.update_setting(interaction.guild.id, f'{log_type}_log_channel_id', channel.id)
-                created_channels.append(f"**{log_type}**: {channel.mention}")
+                created_channels.append(f"✅ `{log_type}` → {channel.mention}")
 
-        embed = discord.Embed(
-            title="📋 Log Kanalları Oluşturuldu",
+            # Discord kanal olusturmayi hiz sinirlamasiyla - bekle
+            if i < total:
+                await asyncio.sleep(2.5)
+
+        final = discord.Embed(
+            title="📋 Log Kanalları Hazır",
             description="\n".join(created_channels) if created_channels else "Hiç kanal oluşturulamadı.",
             color=discord.Color.green(),
             timestamp=datetime.now()
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await status.edit(embed=final)
 
     # ==================== GUARD KOMUTLARI ====================
     @app_commands.command(name='guard_ayarla', description='Guard sistemini ayarla')
