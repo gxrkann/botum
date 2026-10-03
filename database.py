@@ -215,6 +215,41 @@ class Database:
 
         await self.connection.commit()
 
+        await self._migrate_settings()
+
+    async def _migrate_settings(self):
+        """Eksik settings kolonlarini ekle (eski veritabanlari icin)"""
+        log_columns = [
+            'guard_log_channel_id',
+            'mod_log_channel_id',
+            'message_log_channel_id',
+            'voice_log_channel_id',
+            'member_log_channel_id',
+            'silah_katlanan_log_channel_id',
+            'silah_kaybedilen_log_channel_id',
+            'farm_log_channel_id',
+        ]
+
+        try:
+            async with self.connection.execute("PRAGMA table_info(settings)") as cursor:
+                rows = await cursor.fetchall()
+
+            if not rows:
+                return
+
+            existing = {row[1] for row in rows}
+
+            for col in log_columns:
+                if col not in existing:
+                    await self.connection.execute(
+                        f'ALTER TABLE settings ADD COLUMN {col} INTEGER'
+                    )
+                    print(f"[db] Yeni kolon eklendi: {col}", flush=True)
+
+            await self.connection.commit()
+        except Exception as e:
+            print(f"[db] Migration hatasi: {e}", flush=True)
+
     # Economy methods
     async def get_balance(self, user_id: int, guild_id: int):
         async with self.connection.execute(

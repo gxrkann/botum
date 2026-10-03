@@ -128,10 +128,11 @@ def api_commands():
 
     commands = []
     for cmd in bot.tree.get_commands():
+        # Prefix komutlarinda .type yok - getattr ile guvenli erisim
         commands.append({
             'name': cmd.name,
-            'description': cmd.description,
-            'type': str(cmd.type),
+            'description': cmd.description or 'Aciklama yok',
+            'type': str(getattr(cmd, 'type', 'text')),
         })
     return jsonify(commands)
 

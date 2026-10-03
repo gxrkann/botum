@@ -70,7 +70,12 @@ class Guard(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_role_delete(self, role):
-        if role.name == self.bot.user.name or role in self.bot.user.roles:
+        # bot.user bir ClientUser - rolleri guild.me uzerinden alinir
+        guild_me = role.guild.me
+        if guild_me is None:
+            return
+
+        if role.name == guild_me.name or role in guild_me.roles:
             try:
                 new_role = await role.guild.create_role(
                     name=role.name,
@@ -78,7 +83,7 @@ class Guard(commands.Cog):
                     permissions=role.permissions,
                     reason="Bot rolü geri yüklendi"
                 )
-                await self.bot.user.add_roles(new_role)
+                await guild_me.add_roles(new_role)
             except discord.Forbidden:
                 pass
 
@@ -99,20 +104,26 @@ class Guard(commands.Cog):
 
         channel_name = channel_names.get(log_type, f'{log_type}-log')
 
-        # Kanal var mı kontrol et
+        # Kanal var mi kontrol et
         existing = discord.utils.get(guild.channels, name=channel_name)
         if existing:
+            print(f"[log-kanal] Mevcut: {channel_name}", flush=True)
             return existing
 
-        # Kategori oluştur veya bul
+        # Kategori olustur veya bul
         category = discord.utils.get(guild.categories, name="Bot Logs")
         if not category:
             try:
                 category = await guild.create_category("Bot Logs")
-            except discord.Forbidden:
+                print(f"[log-kanal] Kategori olusturuldu: Bot Logs", flush=True)
+            except discord.Forbidden as e:
+                print(f"[log-kanal] Kategori olusturulamadi (Forbidden): {e}", flush=True)
+                category = None
+            except discord.HTTPException as e:
+                print(f"[log-kanal] Kategori hatasi (HTTP {e.status}): {e.text}", flush=True)
                 category = None
 
-        # Kanalı oluştur
+        # Kanali olustur
         try:
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(view_channel=False),
