@@ -65,6 +65,7 @@ class Bot(commands.Bot):
             'cogs.giveaway',
             'cogs.voice_tracker',
             'cogs.guard',
+            'cogs.announcement',
             'dashboard'
         ]
         

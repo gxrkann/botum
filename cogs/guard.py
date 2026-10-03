@@ -82,14 +82,128 @@ class Guard(commands.Cog):
             except discord.Forbidden:
                 pass
 
+    # ==================== LOG KANALLARI ====================
+    async def create_log_channel(self, guild: discord.Guild, log_type: str):
+        """Otomatik log kanalı oluştur"""
+        channel_names = {
+            'guard': 'guard-log',
+            'mod': 'mod-log',
+            'message': 'mesaj-log',
+            'voice': 'ses-log',
+            'member': 'üye-log',
+            'silah_katlanan': 'katlanan-silah',
+            'silah_kaybedilen': 'kaybedilen-silah',
+            'farm': 'farm-log',
+            'all': 'bot-log'
+        }
+
+        channel_name = channel_names.get(log_type, f'{log_type}-log')
+
+        # Kanal var mı kontrol et
+        existing = discord.utils.get(guild.channels, name=channel_name)
+        if existing:
+            return existing
+
+        # Kategori oluştur veya bul
+        category = discord.utils.get(guild.categories, name="Bot Logs")
+        if not category:
+            try:
+                category = await guild.create_category("Bot Logs")
+            except discord.Forbidden:
+                category = None
+
+        # Kanalı oluştur
+        try:
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(view_channel=False),
+                guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True)
+            }
+
+            if category:
+                channel = await guild.create_text_channel(
+                    channel_name,
+                    category=category,
+                    overwrites=overwrites,
+                    reason=f"Bot {log_type} log kanalı"
+                )
+            else:
+                channel = await guild.create_text_channel(
+                    channel_name,
+                    overwrites=overwrites,
+                    reason=f"Bot {log_type} log kanalı"
+                )
+
+            return channel
+        except discord.Forbidden:
+            return None
+
+    @app_commands.command(name='log_kanal', description='Log kanalı ayarla')
+    @app_commands.describe(
+        log_type='Log türü',
+        channel='Log kanalı (boş bırakılırsa otomatik oluşturulur)'
+    )
+    @app_commands.choices(log_type=[
+        app_commands.Choice(name='Guard - Guard logları', value='guard'),
+        app_commands.Choice(name='Moderasyon - Mod logları', value='mod'),
+        app_commands.Choice(name='Mesaj - Mesaj silme/düzenleme', value='message'),
+        app_commands.Choice(name='Ses - Ses kanalı logları', value='voice'),
+        app_commands.Choice(name='Üye - Üye katılma/ayrılma', value='member'),
+        app_commands.Choice(name='Tümü - Tüm loglar', value='all')
+    ])
+    @app_commands.checks.has_permissions(administrator=True)
+    async def log_kanal(self, interaction: discord.Interaction, log_type: str, channel: discord.TextChannel = None):
+        if channel is None:
+            # Otomatik oluştur
+            channel = await self.create_log_channel(interaction.guild, log_type)
+            if not channel:
+                await interaction.response.send_message("❌ Log kanalı oluşturulamadı! Yetkilerimi kontrol et.", ephemeral=True)
+                return
+
+        # Veritabanına kaydet
+        await self.bot.db.update_setting(interaction.guild.id, f'{log_type}_log_channel_id', channel.id)
+
+        embed = discord.Embed(
+            title="📋 Log Kanalı Ayarlandı",
+            description=f"**Log Türü:** {log_type}\n**Kanal:** {channel.mention}",
+            color=discord.Color.green(),
+            timestamp=datetime.now()
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name='log_otomatik', description='Tüm log kanallarını otomatik oluştur')
+    @app_commands.checks.has_permissions(administrator=True)
+    async def log_otomatik(self, interaction: discord.Interaction):
+        """Tüm log kanallarını otomatik oluştur"""
+        created_channels = []
+
+        for log_type in ['guard', 'mod', 'message', 'voice', 'member', 'silah_katlanan', 'silah_kaybedilen', 'farm']:
+            channel = await self.create_log_channel(interaction.guild, log_type)
+            if channel:
+                await self.bot.db.update_setting(interaction.guild.id, f'{log_type}_log_channel_id', channel.id)
+                created_channels.append(f"{log_type}: {channel.mention}")
+
+        embed = discord.Embed(
+            title="📋 Log Kanalları Oluşturuldu",
+            description="\n".join(created_channels) if created_channels else "Hiç kanal oluşturulamadı.",
+            color=discord.Color.green(),
+            timestamp=datetime.now()
+        )
+        await interaction.response.send_message(embed=embed)
+
     # ==================== GUARD KOMUTLARI ====================
     @app_commands.command(name='guard_ayarla', description='Guard sistemini ayarla')
     @app_commands.describe(
         korumalar='Korumaları aç/kapat (örn: ban,kick,rol,kanal,webhook,raid,spam,nuke,emoji,bot)',
-        log_channel='Log kanalı'
+        log_channel='Log kanalı (boş bırakılırsa otomatik oluşturulur)'
     )
     @app_commands.checks.has_permissions(administrator=True)
-    async def guard_ayarla(self, interaction: discord.Interaction, korumalar: str, log_channel: discord.TextChannel):
+    async def guard_ayarla(self, interaction: discord.Interaction, korumalar: str, log_channel: discord.TextChannel = None):
+        if log_channel is None:
+            log_channel = await self.create_log_channel(interaction.guild, 'guard')
+            if not log_channel:
+                await interaction.response.send_message("❌ Log kanalı oluşturulamadı! Yetkilerimi kontrol et.", ephemeral=True)
+                return
+
         settings = {
             'enabled': True,
             'protections': [k.strip().strip() for k in korumalar.split(',')],
