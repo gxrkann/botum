@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discord Bot Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 40px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        header p {
+            color: #888;
+            font-size: 1.1em;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,212,255,0.2);
+        }
+
+        .stat-card .icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #00d4ff;
+        }
+
+        .stat-card .label {
+            color: #888;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .section {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .section h2 {
+            margin-bottom: 15px;
+            color: #00d4ff;
+        }
+
+        .guild-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .guild-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .guild-card img {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+        }
+
+        .guild-card .info h3 {
+            font-size: 1em;
+            margin-bottom: 5px;
+        }
+
+        .guild-card .info p {
+            color: #888;
+            font-size: 0.85em;
+        }
+
+        .command-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+        }
+
+        .command-item {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px;
+            padding: 10px 15px;
+        }
+
+        .command-item .name {
+            color: #00d4ff;
+            font-weight: bold;
+        }
+
+        .command-item .desc {
+            color: #888;
+            font-size: 0.85em;
+            margin-top: 3px;
+        }
+
+        .log-container {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+        }
+
+        .log-entry {
+            padding: 3px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .log-entry .timestamp {
+            color: #00d4ff;
+        }
+
+        .log-entry .level-info { color: #4caf50; }
+        .log-entry .level-error { color: #f44336; }
+        .log-entry .level-warning { color: #ff9800; }
+
+        .refresh-btn {
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-bottom: 20px;
+        }
+
+        .refresh-btn:hover {
+            opacity: 0.9;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #4caf50;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #888;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .tab:hover, .tab.active {
+            background: rgba(0,212,255,0.2);
+            color: #00d4ff;
+            border-color: #00d4ff;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 Discord Bot Dashboard</h1>
+            <p><span class="status-indicator"></span>Bot çevrimiçi • Son güncelleme: <span id="last-update">-</span></p>
+        </header>
+
+        <button class="refresh-btn" onclick="refreshData()">🔄 Yenile</button>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="icon">🏠</div>
+                <div class="value" id="stat-guilds">-</div>
+                <div class="label">Sunucu</div>
+            </div>
+            <div class="stat-card">
+                <div class="icon">👥</div>
+                <div class="value" id="stat-users">-</div>
+                <div class="label">Kullanıcı</div>
+            </div>
+            <div class="stat-card">
+                <div class="icon">📺</div>
+                <div class="value" id="stat-channels">-</div>
+                <div class="label">Kanal</div>
+            </div>
+            <div class="stat-card">
+                <div class="icon">⚡</div>
+                <div class="value" id="stat-latency">-</div>
+                <div class="label">Gecikme (ms)</div>
+            </div>
+            <div class="stat-card">
+                <div class="icon">⌨️</div>
+                <div class="value" id="stat-commands">-</div>
+                <div class="label">Komut</div>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('guilds')">🏠 Sunucular</div>
+            <div class="tab" onclick="showTab('commands')">⌨️ Komutlar</div>
+            <div class="tab" onclick="showTab('logs')">📋 Loglar</div>
+        </div>
+
+        <div id="tab-guilds" class="tab-content active">
+            <div class="section">
+                <h2>Sunucular</h2>
+                <div class="guild-list" id="guild-list">
+                    <p style="color: #888;">Yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-commands" class="tab-content">
+            <div class="section">
+                <h2>Komutlar</h2>
+                <div class="command-list" id="command-list">
+                    <p style="color: #888;">Yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-logs" class="tab-content">
+            <div class="section">
+                <h2>Loglar</h2>
+                <div class="log-container" id="log-container">
+                    <p style="color: #888;">Yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('tab-' + tabName).classList.add('active');
+        }
+
+        async function refreshData() {
+            try {
+                // Stats
+                const stats = await fetch('/api/stats').then(r => r.json());
+                document.getElementById('stat-guilds').textContent = stats.guilds;
+                document.getElementById('stat-users').textContent = stats.users;
+                document.getElementById('stat-channels').textContent = stats.channels;
+                document.getElementById('stat-latency').textContent = stats.latency;
+                document.getElementById('stat-commands').textContent = stats.commands;
+
+                // Guilds
+                const guilds = await fetch('/api/guilds').then(r => r.json());
+                const guildList = document.getElementById('guild-list');
+                guildList.innerHTML = guilds.map(g => `
+                    <div class="guild-card">
+                        <img src="${g.icon || 'https://cdn.discordapp.com/embed/avatars/0.png'}" alt="${g.name}">
+                        <div class="info">
+                            <h3>${g.name}</h3>
+                            <p>${g.member_count} üye</p>
+                        </div>
+                    </div>
+                `).join('');
+
+                // Commands
+                const commands = await fetch('/api/commands').then(r => r.json());
+                const commandList = document.getElementById('command-list');
+                commandList.innerHTML = commands.map(c => `
+                    <div class="command-item">
+                        <div class="name">/${c.name}</div>
+                        <div class="desc">${c.description}</div>
+                    </div>
+                `).join('');
+
+                // Logs
+                const logs = await fetch('/api/logs').then(r => r.json());
+                const logContainer = document.getElementById('log-container');
+                logContainer.innerHTML = logs.logs.map(log => {
+                    const level = log.includes('ERROR') ? 'error' : log.includes('WARNING') ? 'warning' : 'info';
+                    return `<div class="log-entry"><span class="level-${level}">${log}</span></div>`;
+                }).join('');
+
+                document.getElementById('last-update').textContent = new Date().toLocaleString('tr-TR');
+            } catch (e) {
+                console.error('Refresh error:', e);
+            }
+        }
+
+        // Auto refresh every 30 seconds
+        setInterval(refreshData, 30000);
+        refreshData();
+    </script>
+</body>
+</html>

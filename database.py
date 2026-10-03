@@ -1,0 +1,267 @@
+import aiosqlite
+import os
+from datetime import datetime
+
+class Database:
+    def __init__(self):
+        db_url = os.environ.get('DATABASE_URL', 'sqlite:///bot.db')
+        self.db_path = db_url.replace('sqlite:///', '') if db_url.startswith('sqlite:///') else 'bot.db'
+        self.connection = None
+
+    async def connect(self):
+        """Connect to the database and create tables"""
+        self.connection = await aiosqlite.connect(self.db_path)
+        await self.create_tables()
+
+    async def close(self):
+        """Close the database connection"""
+        if self.connection:
+            await self.connection.close()
+
+    async def create_tables(self):
+        """Create all necessary tables"""
+        # Economy table
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS economy (
+                user_id INTEGER PRIMARY KEY,
+                guild_id INTEGER,
+                balance INTEGER DEFAULT 1000,
+                bank INTEGER DEFAULT 0,
+                daily_streak INTEGER DEFAULT 0,
+                last_daily TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Levels table
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS levels (
+                user_id INTEGER,
+                guild_id INTEGER,
+                xp INTEGER DEFAULT 0,
+                level INTEGER DEFAULT 1,
+                messages INTEGER DEFAULT 0,
+                PRIMARY KEY (user_id, guild_id)
+            )
+        ''')
+
+        # Warnings table
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS warnings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                guild_id INTEGER,
+                moderator_id INTEGER,
+                reason TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Mutes table
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS mutes (
+                user_id INTEGER,
+                guild_id INTEGER,
+                mute_role_id INTEGER,
+                reason TEXT,
+                muted_at TEXT,
+                unmute_at TEXT,
+                PRIMARY KEY (user_id, guild_id)
+            )
+        ''')
+
+        # Settings table
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS settings (
+                guild_id INTEGER PRIMARY KEY,
+                prefix TEXT DEFAULT '!',
+                welcome_channel_id INTEGER,
+                welcome_message TEXT,
+                leave_channel_id INTEGER,
+                leave_message TEXT,
+                log_channel_id INTEGER,
+                mute_role_id INTEGER,
+                autorole_id INTEGER,
+                levelup_channel_id INTEGER,
+                levelup_message TEXT
+            )
+        ''')
+
+        # Music queue table
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS music_queue (
+                guild_id INTEGER PRIMARY KEY,
+                current_song TEXT,
+                queue TEXT,
+                volume INTEGER DEFAULT 100,
+                loop_mode TEXT DEFAULT 'off'
+            )
+        ''')
+
+        # Giveaways table
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS giveaways (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER,
+                channel_id INTEGER,
+                message_id INTEGER,
+                prize TEXT,
+                winners INTEGER,
+                end_time TEXT,
+                host_id INTEGER,
+                ended INTEGER DEFAULT 0
+            )
+        ''')
+
+        # Reminders table
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS reminders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                guild_id INTEGER,
+                reminder TEXT,
+                remind_at TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        await self.connection.commit()
+
+    # Economy methods
+    async def get_balance(self, user_id: int, guild_id: int):
+        async with self.connection.execute(
+            'SELECT balance, bank FROM economy WHERE user_id = ? AND guild_id = ?',
+            (user_id, guild_id)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return {'balance': row[0], 'bank': row[1]}
+            return None
+
+    async def create_user(self, user_id: int, guild_id: int):
+        await self.connection.execute(
+            'INSERT OR IGNORE INTO economy (user_id, guild_id) VALUES (?, ?)',
+            (user_id, guild_id)
+        )
+        await self.connection.commit()
+
+    async def update_balance(self, user_id: int, guild_id: int, amount: int):
+        await self.create_user(user_id, guild_id)
+        await self.connection.execute(
+            'UPDATE economy SET balance = balance + ? WHERE user_id = ? AND guild_id = ?',
+            (amount, user_id, guild_id)
+        )
+        await self.connection.commit()
+
+    async def update_bank(self, user_id: int, guild_id: int, amount: int):
+        await self.create_user(user_id, guild_id)
+        await self.connection.execute(
+            'UPDATE economy SET bank = bank + ? WHERE user_id = ? AND guild_id = ?',
+            (amount, user_id, guild_id)
+        )
+        await self.connection.commit()
+
+    # Levels methods
+    async def get_level(self, user_id: int, guild_id: int):
+        async with self.connection.execute(
+            'SELECT xp, level, messages FROM levels WHERE user_id = ? AND guild_id = ?',
+            (user_id, guild_id)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return {'xp': row[0], 'level': row[1], 'messages': row[2]}
+            return None
+
+    async def update_xp(self, user_id: int, guild_id: int, xp: int):
+        await self.connection.execute(
+            '''INSERT INTO levels (user_id, guild_id, xp, messages) 
+               VALUES (?, ?, ?, 1)
+               ON CONFLICT(user_id, guild_id) 
+               DO UPDATE SET xp = xp + ?, messages = messages + 1''',
+            (user_id, guild_id, xp, xp)
+        )
+        await self.connection.commit()
+
+    async def set_level(self, user_id: int, guild_id: int, level: int):
+        await self.connection.execute(
+            'UPDATE levels SET level = ? WHERE user_id = ? AND guild_id = ?',
+            (level, user_id, guild_id)
+        )
+        await self.connection.commit()
+
+    # Warnings methods
+    async def add_warning(self, user_id: int, guild_id: int, moderator_id: int, reason: str):
+        await self.connection.execute(
+            'INSERT INTO warnings (user_id, guild_id, moderator_id, reason) VALUES (?, ?, ?, ?)',
+            (user_id, guild_id, moderator_id, reason)
+        )
+        await self.connection.commit()
+
+    async def get_warnings(self, user_id: int, guild_id: int):
+        async with self.connection.execute(
+            'SELECT * FROM warnings WHERE user_id = ? AND guild_id = ? ORDER BY created_at DESC',
+            (user_id, guild_id)
+        ) as cursor:
+            return await cursor.fetchall()
+
+    async def remove_warning(self, warning_id: int):
+        await self.connection.execute(
+            'DELETE FROM warnings WHERE id = ?',
+            (warning_id,)
+        )
+        await self.connection.commit()
+
+    # Settings methods
+    async def get_settings(self, guild_id: int):
+        async with self.connection.execute(
+            'SELECT * FROM settings WHERE guild_id = ?',
+            (guild_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return {
+                    'prefix': row[1],
+                    'welcome_channel_id': row[2],
+                    'welcome_message': row[3],
+                    'leave_channel_id': row[4],
+                    'leave_message': row[5],
+                    'log_channel_id': row[6],
+                    'mute_role_id': row[7],
+                    'autorole_id': row[8],
+                    'levelup_channel_id': row[9],
+                    'levelup_message': row[10]
+                }
+            return None
+
+    async def update_setting(self, guild_id: int, key: str, value):
+        await self.connection.execute(
+            'INSERT OR IGNORE INTO settings (guild_id) VALUES (?)',
+            (guild_id,)
+        )
+        await self.connection.execute(
+            f'UPDATE settings SET {key} = ? WHERE guild_id = ?',
+            (value, guild_id)
+        )
+        await self.connection.commit()
+
+    # Reminders methods
+    async def add_reminder(self, user_id: int, guild_id: int, reminder: str, remind_at: str):
+        await self.connection.execute(
+            'INSERT INTO reminders (user_id, guild_id, reminder, remind_at) VALUES (?, ?, ?, ?)',
+            (user_id, guild_id, reminder, remind_at)
+        )
+        await self.connection.commit()
+
+    async def get_reminders(self, user_id: int):
+        async with self.connection.execute(
+            'SELECT * FROM reminders WHERE user_id = ? AND remind_at <= ?',
+            (user_id, datetime.now().isoformat())
+        ) as cursor:
+            return await cursor.fetchall()
+
+    async def remove_reminder(self, reminder_id: int):
+        await self.connection.execute(
+            'DELETE FROM reminders WHERE id = ?',
+            (reminder_id,)
+        )
+        await self.connection.commit()
