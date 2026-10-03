@@ -125,6 +125,78 @@ class Database:
             )
         ''')
 
+        # Farms table
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS farms (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER,
+                user_id INTEGER,
+                amount INTEGER,
+                reason TEXT,
+                moderator_id INTEGER,
+                created_at TEXT
+            )
+        ''')
+
+        # FiveM weapons table
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS fivem_weapons (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER,
+                user_id INTEGER,
+                weapon_name TEXT,
+                price INTEGER,
+                moderator_id INTEGER,
+                created_at TEXT
+            )
+        ''')
+
+        # FiveM weapons lost table
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS fivem_weapons_lost (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER,
+                user_id INTEGER,
+                weapon_name TEXT,
+                reason TEXT,
+                moderator_id INTEGER,
+                created_at TEXT
+            )
+        ''')
+
+        # Guard settings table
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS guard_settings (
+                guild_id INTEGER PRIMARY KEY,
+                settings TEXT
+            )
+        ''')
+
+        # Quarantines table
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS quarantines (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER,
+                user_id INTEGER,
+                reason TEXT,
+                moderator_id INTEGER,
+                created_at TEXT,
+                expires_at TEXT
+            )
+        ''')
+
+        # Server quarantines table
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS server_quarantines (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER,
+                reason TEXT,
+                moderator_id INTEGER,
+                created_at TEXT,
+                expires_at TEXT
+            )
+        ''')
+
         await self.connection.commit()
 
     # Economy methods

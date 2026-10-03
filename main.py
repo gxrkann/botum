@@ -55,13 +55,16 @@ class Bot(commands.Bot):
         cogs = [
             'cogs.moderation',
             'cogs.music',
-            'cogs.economy',
-            'cogs.levels',
             'cogs.fun',
             'cogs.utility',
             'cogs.events',
             'cogs.error_handler',
             'cogs.help',
+            'cogs.farm',
+            'cogs.fivem',
+            'cogs.giveaway',
+            'cogs.voice_tracker',
+            'cogs.guard',
             'dashboard'
         ]
         
@@ -83,10 +86,14 @@ class Bot(commands.Bot):
         logger.info(f'{self.user} has connected to Discord!')
         logger.info(f'Bot is in {len(self.guilds)} guilds')
         
-        # Set bot status
+        # Set bot status - Oyun oynuyor
         activity = discord.Activity(
-            type=discord.ActivityType.watching,
-            name=f'{len(self.guilds)} sunucu | /help'
+            type=discord.ActivityType.playing,
+            name=get_env('BOT_STATUS', 'FiveM'),
+            large_image=get_env('BOT_LARGE_IMAGE', None),
+            large_text=get_env('BOT_LARGE_TEXT', None),
+            small_image=get_env('BOT_SMALL_IMAGE', None),
+            small_text=get_env('BOT_SMALL_TEXT', None)
         )
         await self.change_presence(activity=activity)
 
@@ -98,6 +105,63 @@ class Bot(commands.Bot):
 bot = Bot()
 
 # Owner-only commands
+@bot.command(name='bot_pp')
+@commands.is_owner()
+async def bot_pp(ctx, image_url: str = None):
+    """Botun profil resmini değiştir (Owner only)"""
+    try:
+        if image_url:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url) as resp:
+                    if resp.status == 200:
+                        image_data = await resp.read()
+                        await bot.user.edit(avatar=image_data)
+                        await ctx.send("✅ Botun profil resmi değiştirildi!")
+                    else:
+                        await ctx.send("❌ Resim indirilemedi!")
+        else:
+            await ctx.send("❌ Bir resim URL'si girin! Kullanım: `!bot_pp https://example.com/image.png`")
+    except Exception as e:
+        await ctx.send(f"❌ Hata: {e}")
+
+@bot.command(name='bot_banner')
+@commands.is_owner()
+async def bot_banner(ctx, image_url: str = None):
+    """Botun banner resmini değiştir (Owner only)"""
+    try:
+        if image_url:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url) as resp:
+                    if resp.status == 200:
+                        image_data = await resp.read()
+                        await bot.user.edit(banner=image_data)
+                        await ctx.send("✅ Botun banner resmi değiştirildi!")
+                    else:
+                        await ctx.send("❌ Resim indirilemedi!")
+        else:
+            await ctx.send("❌ Bir resim URL'si girin! Kullanım: `!bot_banner https://example.com/banner.png`")
+    except Exception as e:
+        await ctx.send(f"❌ Hata: {e}")
+
+@bot.command(name='bot_durum')
+@commands.is_owner()
+async def bot_durum(ctx, *, status: str = None):
+    """Botun durumunu değiştir (Owner only)"""
+    try:
+        if status:
+            activity = discord.Activity(
+                type=discord.ActivityType.playing,
+                name=status
+            )
+            await bot.change_presence(activity=activity)
+            await ctx.send(f"✅ Botun durumu değiştirildi: **{status}**")
+        else:
+            await ctx.send("❌ Bir durum girin! Kullanım: `!bot_durum FiveM`")
+    except Exception as e:
+        await ctx.send(f"❌ Hata: {e}")
+
 @bot.command(name='load')
 @commands.is_owner()
 async def load_cog(ctx, extension: str):
@@ -133,7 +197,7 @@ async def reload_cog(ctx, extension: str):
 async def reload_all_cogs(ctx):
     """Reload all cogs (Owner only)"""
     cogs = [
-        'moderation', 'music', 'economy', 'levels',
+        'moderation', 'music',
         'fun', 'utility', 'events', 'error_handler', 'help', 'dashboard'
     ]
     

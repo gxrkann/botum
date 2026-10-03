@@ -234,6 +234,131 @@
         .tab-content.active {
             display: block;
         }
+
+        .backup-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 10px;
+        }
+
+        .backup-item {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px;
+            padding: 10px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .backup-item .filename {
+            color: #00d4ff;
+            font-size: 0.9em;
+        }
+
+        .backup-item .date {
+            color: #888;
+            font-size: 0.8em;
+        }
+
+        .farm-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .farm-stat {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .farm-stat .value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #4caf50;
+        }
+
+        .farm-stat .label {
+            color: #888;
+            font-size: 0.85em;
+        }
+
+        .fivem-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .fivem-stat {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .fivem-stat .value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #ff9800;
+        }
+
+        .fivem-stat .label {
+            color: #888;
+            font-size: 0.85em;
+        }
+
+        .voice-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+        }
+
+        .voice-item {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px;
+            padding: 10px 15px;
+        }
+
+        .voice-item .name {
+            color: #00d4ff;
+            font-weight: bold;
+        }
+
+        .voice-item .time {
+            color: #888;
+            font-size: 0.85em;
+        }
+
+        .giveaway-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 10px;
+        }
+
+        .giveaway-item {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px;
+            padding: 10px 15px;
+        }
+
+        .giveaway-item .prize {
+            color: #ffd700;
+            font-weight: bold;
+        }
+
+        .giveaway-item .info {
+            color: #888;
+            font-size: 0.85em;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
@@ -277,6 +402,13 @@
             <div class="tab active" onclick="showTab('guilds')">🏠 Sunucular</div>
             <div class="tab" onclick="showTab('commands')">⌨️ Komutlar</div>
             <div class="tab" onclick="showTab('logs')">📋 Loglar</div>
+            <div class="tab" onclick="showTab('backups')">💾 Yedekler</div>
+            <div class="tab" onclick="showTab('farm')">🌾 Farm</div>
+            <div class="tab" onclick="showTab('fivem')">🔫 FiveM</div>
+            <div class="tab" onclick="showTab('giveaways')">🎉 Çekiliş</div>
+            <div class="tab" onclick="showTab('voice')">🎤 Ses</div>
+            <div class="tab" onclick="showTab('guard')">🛡️ Guard</div>
+            <div class="tab" onclick="showTab('settings')">⚙️ Ayarlar</div>
         </div>
 
         <div id="tab-guilds" class="tab-content active">
@@ -301,6 +433,98 @@
             <div class="section">
                 <h2>Loglar</h2>
                 <div class="log-container" id="log-container">
+                    <p style="color: #888;">Yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-backups" class="tab-content">
+            <div class="section">
+                <h2>Yedekler</h2>
+                <div class="backup-list" id="backup-list">
+                    <p style="color: #888;">Yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-farm" class="tab-content">
+            <div class="section">
+                <h2>Farm İstatistikleri</h2>
+                <div class="farm-stats">
+                    <div class="farm-stat">
+                        <div class="value" id="farm-total">-</div>
+                        <div class="label">Toplam Farm</div>
+                    </div>
+                    <div class="farm-stat">
+                        <div class="value" id="farm-amount">-</div>
+                        <div class="label">Toplam Miktar</div>
+                    </div>
+                </div>
+                <div id="farm-users">
+                    <p style="color: #888;">Yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-fivem" class="tab-content">
+            <div class="section">
+                <h2>FiveM Silah İstatistikleri</h2>
+                <div class="fivem-stats">
+                    <div class="fivem-stat">
+                        <div class="value" id="fivem-weapons">-</div>
+                        <div class="label">Toplam Silah</div>
+                    </div>
+                    <div class="fivem-stat">
+                        <div class="value" id="fivem-value">-</div>
+                        <div class="label">Toplam Değer</div>
+                    </div>
+                    <div class="fivem-stat">
+                        <div class="value" id="fivem-lost">-</div>
+                        <div class="label">Kaybedilen</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-giveaways" class="tab-content">
+            <div class="section">
+                <h2>Aktif Çekilişler</h2>
+                <div class="giveaway-list" id="giveaway-list">
+                    <p style="color: #888;">Yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-voice" class="tab-content">
+            <div class="section">
+                <h2>Ses Süreleri</h2>
+                <div class="voice-list" id="voice-list">
+                    <p style="color: #888;">Yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-guard" class="tab-content">
+            <div class="section">
+                <h2>Guard Ayarları</h2>
+                <div id="guard-status">
+                    <p style="color: #888;">Yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-settings" class="tab-content">
+            <div class="section">
+                <h2>Bot Ayarları</h2>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 5px; color: #888;">Bot Durumu (Oyun Adı)</label>
+                    <input type="text" id="bot-status" placeholder="FiveM" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #fff;">
+                </div>
+                <button class="refresh-btn" onclick="updateBotStatus()">💾 Kaydet</button>
+            </div>
+            <div class="section">
+                <h2>Botu Sunucuya Ekle</h2>
+                <div id="bot-invite">
                     <p style="color: #888;">Yükleniyor...</p>
                 </div>
             </div>
@@ -356,9 +580,98 @@
                     return `<div class="log-entry"><span class="level-${level}">${log}</span></div>`;
                 }).join('');
 
+                // Backups
+                const backups = await fetch('/api/backups').then(r => r.json());
+                const backupList = document.getElementById('backup-list');
+                backupList.innerHTML = backups.map(b => `
+                    <div class="backup-item">
+                        <div>
+                            <div class="filename">${b.filename}</div>
+                            <div class="date">${new Date(b.created).toLocaleString('tr-TR')}</div>
+                        </div>
+                    </div>
+                `).join('');
+
+                // Get first guild ID for guild-specific data
+                const firstGuildId = guilds.length > 0 ? guilds[0].id : null;
+
+                if (firstGuildId) {
+                    // Farm stats
+                    const farm = await fetch(`/api/farm/${firstGuildId}`).then(r => r.json());
+                    document.getElementById('farm-total').textContent = farm.total_farms;
+                    document.getElementById('farm-amount').textContent = farm.total_amount + ' 🪙';
+
+                    // FiveM stats
+                    const fivem = await fetch(`/api/fivem/${firstGuildId}`).then(r => r.json());
+                    document.getElementById('fivem-weapons').textContent = fivem.total_weapons;
+                    document.getElementById('fivem-value').textContent = fivem.total_value + ' 💵';
+                    document.getElementById('fivem-lost').textContent = fivem.total_lost;
+
+                    // Voice stats
+                    const voice = await fetch(`/api/voice/${firstGuildId}`).then(r => r.json());
+                    const voiceList = document.getElementById('voice-list');
+                    voiceList.innerHTML = voice.map(v => `
+                        <div class="voice-item">
+                            <div class="name">${v.name}</div>
+                            <div class="time">${Math.floor(v.total_seconds / 3600)}s ${Math.floor((v.total_seconds % 3600) / 60)}d</div>
+                        </div>
+                    `).join('');
+                }
+
+                // Giveaways
+                const giveaways = await fetch('/api/giveaways').then(r => r.json());
+                const giveawayList = document.getElementById('giveaway-list');
+                giveawayList.innerHTML = giveaways.map(g => `
+                    <div class="giveaway-item">
+                        <div class="prize">${g.prize}</div>
+                        <div class="info">Kazanan: ${g.winners} | Bitiş: ${new Date(g.end_time).toLocaleString('tr-TR')}</div>
+                    </div>
+                `).join('');
+
+                // Guard
+                const guard = await fetch(`/api/guard/${firstGuildId}`).then(r => r.json());
+                const guardStatus = document.getElementById('guard-status');
+                if (guard && !guard.error) {
+                    guardStatus.innerHTML = `
+                        <div class="farm-stat">
+                            <div class="value">${guard.enabled ? 'Aktif' : 'Pasif'}</div>
+                            <div class="label">Durum</div>
+                        </div>
+                        <div class="farm-stat">
+                            <div class="value">${guard.protections ? guard.protections.length : 0}</div>
+                            <div class="label">Koruma Sayısı</div>
+                        </div>
+                    `;
+                } else {
+                    guardStatus.innerHTML = '<p style="color: #888;">Guard ayarlanmamış</p>';
+                }
+
+                // Bot invite
+                const invite = await fetch('/api/bot_invite').then(r => r.json());
+                const botInvite = document.getElementById('bot-invite');
+                if (invite.invite_url) {
+                    botInvite.innerHTML = `
+                        <a href="${invite.invite_url}" target="_blank" style="display: inline-block; background: linear-gradient(90deg, #00d4ff, #7b2cbf); color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: bold;">Botu Sunucuya Ekle</a>
+                    `;
+                }
+
                 document.getElementById('last-update').textContent = new Date().toLocaleString('tr-TR');
             } catch (e) {
                 console.error('Refresh error:', e);
+            }
+        }
+
+        async function updateBotStatus() {
+            const status = document.getElementById('bot-status').value;
+            try {
+                await fetch('/api/bot_settings', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({status: status})
+                });
+                alert('Bot durumu güncellendi!');
+            } catch (e) {
+                alert('Hata: ' + e);
             }
         }
 
