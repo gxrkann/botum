@@ -13,7 +13,7 @@ class Dashboard(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.app = app
-        self.port = 5000
+        self.port = int(os.environ.get('PORT', 5000))
         self.dashboard_thread = None
 
     def run_dashboard(self):
@@ -118,27 +118,6 @@ def api_logs():
         return jsonify({'logs': lines})
     except FileNotFoundError:
         return jsonify({'logs': []})
-
-@app.route('/api/guard/<int:guild_id>')
-def api_guard(guild_id):
-    """Get guard settings"""
-    bot = app.config.get('BOT')
-    if not bot:
-        return jsonify({'error': 'Bot not available'}), 500
-
-    async def get_guard():
-        async with bot.db.connection.execute(
-            'SELECT settings FROM guard_settings WHERE guild_id = ?',
-            (guild_id,)
-        ) as cursor:
-            row = await cursor.fetchone()
-            if row:
-                import json
-                return json.loads(row[0])
-            return None
-
-    result = asyncio.run_coroutine_threadsafe(get_guard(), bot.loop).result()
-    return jsonify(result or {'error': 'Guard not configured'})
 
 @app.route('/api/backups')
 def api_backups():

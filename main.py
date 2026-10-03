@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import asyncio
 import os
+import sys
 import logging
 from database import Database
 
@@ -18,25 +19,34 @@ def get_env(key, default=None):
             value = default
     return value
 
-# Logging setup
+# Logging setup - hosting ortamında dosya yazılamayabilir, o yüzden güvenli
+log_handlers = [logging.StreamHandler(sys.stdout)]
+try:
+    log_handlers.insert(0, logging.FileHandler('bot.log', encoding='utf-8'))
+except (OSError, PermissionError):
+    pass  # Dosya yazılamıyorsa sadece konsola yaz
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('bot.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
+    handlers=log_handlers
 )
 logger = logging.getLogger('discord_bot')
 
 # Bot configuration
 class Bot(commands.Bot):
     def __init__(self):
-        intents = discord.Intents.all()
+        intents = discord.Intents.default()
+
+        # MESSAGE CONTENT INTENT - zorunlu, portal'da açık olmalı
         intents.message_content = True
-        intents.members = True
+
+        # SERVER MEMBERS INTENT - açık değilse bot çöker, o yüzden opsiyonel
+        if get_env('ENABLE_MEMBERS_INTENT', 'true').lower() == 'true':
+            intents.members = True
+
         intents.voice_states = True
-        
+
         super().__init__(
             command_prefix=get_env('PREFIX', '!'),
             intents=intents,
@@ -232,6 +242,18 @@ if __name__ == '__main__':
     try:
         bot.run(token, reconnect=True)
     except discord.LoginFailure:
-        logger.error('Invalid token! Please check your DISCORD_TOKEN.')
+        logger.error('❌ Geçersiz token! DISCORD_TOKEN değerini kontrol et.')
+    except discord.errors.PrivilegedIntentsRequired as e:
+        logger.error('=' * 60)
+        logger.error('❌ PRIVILEGED INTENTS KAPALI - Bot çalışamaz!')
+        logger.error('=' * 60)
+        logger.error('Çözüm:')
+        logger.error('1. https://discord.com/developers/applications adresine git')
+        logger.error('2. Uygulamanı seç → Bot sekmesi')
+        logger.error('3. "Privileged Gateway Intents" bölümünde:')
+        logger.error('   ✅ MESSAGE CONTENT INTENT → AÇ')
+        logger.error('   ✅ SERVER MEMBERS INTENT → AÇ')
+        logger.error('4. "Save Changes" butonuna tıkla')
+        logger.error('=' * 60)
     except Exception as e:
-        logger.error(f'Bot crashed: {e}')
+        logger.error(f'❌ Bot çöktü: {type(e).__name__}: {e}')

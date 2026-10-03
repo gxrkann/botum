@@ -5,12 +5,28 @@ from datetime import datetime
 class Database:
     def __init__(self):
         db_url = os.environ.get('DATABASE_URL', 'sqlite:///bot.db')
-        self.db_path = db_url.replace('sqlite:///', '') if db_url.startswith('sqlite:///') else 'bot.db'
+        if db_url.startswith('sqlite:///'):
+            self.db_path = db_url.replace('sqlite:///', '', 1)
+        else:
+            self.db_path = 'bot.db'
         self.connection = None
+
+    def _resolve_path(self):
+        """Veritabanı yazılabilir değilse çalışma dizinine düş"""
+        if os.path.dirname(self.db_path):
+            os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        return self.db_path
 
     async def connect(self):
         """Connect to the database and create tables"""
-        self.connection = await aiosqlite.connect(self.db_path)
+        try:
+            self.connection = await aiosqlite.connect(self._resolve_path())
+        except (OSError, PermissionError) as e:
+            # Yazma izni yoksa geçici dizin kullan
+            import tempfile
+            fallback = os.path.join(tempfile.gettempdir(), 'bot.db')
+            print(f"[!] Veritabanı yazılamadı ({e}), geçici dizin kullanılıyor: {fallback}")
+            self.connection = await aiosqlite.connect(fallback)
         await self.create_tables()
 
     async def close(self):
