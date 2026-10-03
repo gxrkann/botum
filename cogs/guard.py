@@ -153,10 +153,12 @@ class Guard(commands.Cog):
     @app_commands.checks.has_permissions(administrator=True)
     async def log_kanal(self, interaction: discord.Interaction, log_type: str, channel: discord.TextChannel = None):
         if channel is None:
-            # Otomatik oluştur
+            # Kanal olusturulunca 3 saniyeyi asabilir
+            await interaction.response.defer(ephemeral=True)
+
             channel = await self.create_log_channel(interaction.guild, log_type)
             if not channel:
-                await interaction.response.send_message("❌ Log kanalı oluşturulamadı! Yetkilerimi kontrol et.", ephemeral=True)
+                await interaction.followup.send("❌ Log kanalı oluşturulamadı! Yetkilerimi kontrol et.", ephemeral=True)
                 return
 
         # Veritabanına kaydet
@@ -168,19 +170,28 @@ class Guard(commands.Cog):
             color=discord.Color.green(),
             timestamp=datetime.now()
         )
-        await interaction.response.send_message(embed=embed)
+
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name='log_otomatik', description='Tüm log kanallarını otomatik oluştur')
     @app_commands.checks.has_permissions(administrator=True)
     async def log_otomatik(self, interaction: discord.Interaction):
         """Tüm log kanallarını otomatik oluştur"""
-        created_channels = []
+        # Discord 3 saniye zaman aşımı - hemen defer et
+        await interaction.response.defer(ephemeral=True)
 
-        for log_type in ['guard', 'mod', 'message', 'voice', 'member', 'silah_katlanan', 'silah_kaybedilen', 'farm']:
+        created_channels = []
+        log_types = ['guard', 'mod', 'message', 'voice', 'member',
+                     'silah_katlanan', 'silah_kaybedilen', 'farm']
+
+        for log_type in log_types:
             channel = await self.create_log_channel(interaction.guild, log_type)
             if channel:
                 await self.bot.db.update_setting(interaction.guild.id, f'{log_type}_log_channel_id', channel.id)
-                created_channels.append(f"{log_type}: {channel.mention}")
+                created_channels.append(f"**{log_type}**: {channel.mention}")
 
         embed = discord.Embed(
             title="📋 Log Kanalları Oluşturuldu",
@@ -188,7 +199,7 @@ class Guard(commands.Cog):
             color=discord.Color.green(),
             timestamp=datetime.now()
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     # ==================== GUARD KOMUTLARI ====================
     @app_commands.command(name='guard_ayarla', description='Guard sistemini ayarla')
@@ -198,10 +209,13 @@ class Guard(commands.Cog):
     )
     @app_commands.checks.has_permissions(administrator=True)
     async def guard_ayarla(self, interaction: discord.Interaction, korumalar: str, log_channel: discord.TextChannel = None):
+        # Kanal otomatik olusturulacaksa once defer et
         if log_channel is None:
+            await interaction.response.defer(ephemeral=True)
+
             log_channel = await self.create_log_channel(interaction.guild, 'guard')
             if not log_channel:
-                await interaction.response.send_message("❌ Log kanalı oluşturulamadı! Yetkilerimi kontrol et.", ephemeral=True)
+                await interaction.followup.send("❌ Log kanalı oluşturulamadı! Yetkilerimi kontrol et.", ephemeral=True)
                 return
 
         settings = {
@@ -222,7 +236,11 @@ class Guard(commands.Cog):
             color=discord.Color.green(),
             timestamp=datetime.now()
         )
-        await interaction.response.send_message(embed=embed)
+
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name='guard_durum', description='Guard durumunu gör')
     async def guard_durum(self, interaction: discord.Interaction):
@@ -521,13 +539,16 @@ class Guard(commands.Cog):
     @app_commands.describe(member='Karantinaya alınacak üye', reason='Karantina nedeni', duration='Süre (örn: 10m, 1h, 1d)')
     @app_commands.checks.has_permissions(administrator=True)
     async def karantina(self, interaction: discord.Interaction, member: discord.Member, reason: str = "Belirtilmedi", duration: str = "1h"):
+        # Rol olusturulup tum kanallar duzenlenirken 3 saniyeyi asabilir
+        await interaction.response.defer()
+
         duration_map = {'m': 60, 'h': 3600, 'd': 86400}
         try:
             unit = duration[-1].lower()
             value = int(duration[:-1])
             seconds = value * duration_map[unit]
         except:
-            await interaction.response.send_message("❌ Geçersiz süre formatı! Örnek: 10m, 1h, 1d", ephemeral=True)
+            await interaction.followup.send("❌ Geçersiz süre formatı! Örnek: 10m, 1h, 1d", ephemeral=True)
             return
 
         quarantine_role = discord.utils.get(interaction.guild.roles, name="Karantina")
@@ -537,7 +558,7 @@ class Guard(commands.Cog):
                 for channel in interaction.guild.channels:
                     await channel.set_permissions(quarantine_role, send_messages=False, speak=False)
             except discord.Forbidden:
-                await interaction.response.send_message("❌ Karantina rolü oluşturulamadı!", ephemeral=True)
+                await interaction.followup.send("❌ Karantina rolü oluşturulamadı!", ephemeral=True)
                 return
 
         try:
@@ -553,11 +574,11 @@ class Guard(commands.Cog):
             await self.log_action(interaction.guild.id, "Karantina", member.mention, interaction.user.mention, reason)
 
             embed = discord.Embed(title="🔒 Karantina", description=f"{member.mention} üyesi karantinaya alındı! Süre: **{duration}**", color=discord.Color.red(), timestamp=datetime.now())
-            await interaction.response.send_message(embed=embed)
+            await interaction.followup.send(embed=embed)
 
             asyncio.create_task(self.auto_remove_quarantine(member, quarantine_role, seconds))
         except discord.Forbidden:
-            await interaction.response.send_message("❌ Bu üyeyi karantinaya alamıyorum!", ephemeral=True)
+            await interaction.followup.send("❌ Bu üyeyi karantinaya alamıyorum!", ephemeral=True)
 
     @app_commands.command(name='karantina_cikar', description='Karantinadan çıkar')
     @app_commands.describe(member='Karantinadan çıkarılacak üye')
@@ -606,13 +627,15 @@ class Guard(commands.Cog):
     @app_commands.describe(reason='Karantina nedeni', duration='Süre (örn: 10m, 1h, 1d)')
     @app_commands.checks.has_permissions(administrator=True)
     async def sunucu_karantina(self, interaction: discord.Interaction, reason: str = "Sunucu karantinası", duration: str = "1h"):
+        await interaction.response.defer()
+
         duration_map = {'m': 60, 'h': 3600, 'd': 86400}
         try:
             unit = duration[-1].lower()
             value = int(duration[:-1])
             seconds = value * duration_map[unit]
         except:
-            await interaction.response.send_message("❌ Geçersiz süre formatı! Örnek: 10m, 1h, 1d", ephemeral=True)
+            await interaction.followup.send("❌ Geçersiz süre formatı! Örnek: 10m, 1h, 1d", ephemeral=True)
             return
 
         guild = interaction.guild
@@ -646,7 +669,7 @@ class Guard(commands.Cog):
         await self.log_action(guild.id, "Sunucu Karantinası", guild.name, interaction.user.mention, reason)
 
         embed = discord.Embed(title="🔒 Sunucu Karantinası", description=f"**{guild.name}** sunucusu karantinaya alındı! Süre: **{duration}**", color=discord.Color.red(), timestamp=datetime.now())
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
         asyncio.create_task(self.auto_unlock_server(guild, quarantine_role, seconds))
 
