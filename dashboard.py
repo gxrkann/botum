@@ -15,21 +15,43 @@ class Dashboard(commands.Cog):
         self.app = app
         self.port = int(os.environ.get('PORT', 5000))
         self.dashboard_thread = None
+        self._started = False
+        self._lock = threading.Lock()
 
     def run_dashboard(self):
-        """Run the Flask dashboard in a separate thread"""
-        self.app.run(host='0.0.0.0', port=self.port, debug=False, use_reloader=False)
+        """Flask dashboard'i ayri thread'de calistir"""
+        try:
+            self.app.run(host='0.0.0.0', port=self.port, debug=False, use_reloader=False)
+        except Exception as e:
+            print(f"[dashboard] Sunucu baslatilamadi: {e}", flush=True)
 
     async def start_dashboard(self):
-        """Start the dashboard"""
-        self.dashboard_thread = threading.Thread(target=self.run_dashboard, daemon=True)
-        self.dashboard_thread.start()
-        self.bot.logger.info(f"Dashboard started on http://localhost:{self.port}")
+        """Dashboard'i baslat (sadece bir kez)"""
+        with self._lock:
+            if self._started:
+                return
+            self._started = True
+
+        try:
+            self.dashboard_thread = threading.Thread(target=self.run_dashboard, daemon=True)
+            self.dashboard_thread.start()
+            self.bot.logger.info(f"Dashboard started on port {self.port}")
+        except Exception as e:
+            self.bot.logger.error(f"Dashboard could not start: {e}")
 
     @commands.Cog.listener()
     async def on_ready(self):
-        """Start dashboard when bot is ready"""
         await self.start_dashboard()
+
+# Health check - Pterodactyl/PaaS icin
+@app.route('/health')
+def health():
+    bot = app.config.get('BOT')
+    return jsonify({
+        'status': 'ok',
+        'bot': str(bot.user) if bot and bot.user else 'not connected',
+        'guilds': len(bot.guilds) if bot else 0
+    }), 200
 
 # Flask routes
 @app.route('/')
@@ -372,5 +394,12 @@ def api_bot_add(guild_id):
     return jsonify({'invite_url': invite_url, 'guild_name': guild.name})
 
 async def setup(bot):
-    await bot.add_cog(Dashboard(bot))
     app.config['BOT'] = bot
+    cog = Dashboard(bot)
+    await bot.add_cog(cog)
+
+    # Bot cog yuklenmeden once hazirlandiysa on_ready tetiklenmez,
+    # bu yuzden elle kontrol edip dashboard'u hemen baslat.
+    if bot.is_ready():
+        await asyncio.sleep(0.5)  # bot loop'unu bekle
+        await cog.start_dashboard()
