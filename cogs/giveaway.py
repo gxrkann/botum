@@ -9,6 +9,8 @@ class Giveaway(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.active_giveaways = {}
+        # Katilimcilar buton ID -> set(user_id)
+        self.giveaway_participants = {}
 
     @app_commands.command(name='cekilis_baslat', description='Çekiliş başlat')
     @app_commands.describe(
@@ -36,15 +38,21 @@ class Giveaway(commands.Cog):
 
         end_time = datetime.now() + timedelta(seconds=seconds)
 
+        # Buton icin benzersiz ID (her cekilise ozel olmali)
+        button_id = f"giveaway_{interaction.guild.id}_{int(datetime.now().timestamp())}"
+
         embed = discord.Embed(
             title="🎉 Çekiliş",
             description=f"**Ödül:** {prize}\n**Kazanan Sayısı:** {winners}\n**Süre:** {duration}\n**Başlatan:** {interaction.user.mention}",
             color=discord.Color.gold(),
             timestamp=end_time
         )
-        embed.set_footer(text="Katılmak için butona tıkla!")
+        embed.set_footer(text="Katılmak için aşağıdaki butona tıkla!")
+        embed.set_footer(text="Katılmak için aşağıdaki butona tıkla!")
 
-        view = GiveawayView(self.bot, prize, winners, end_time, channel.id, interaction.guild.id, interaction.user.id)
+        view = GiveawayView(self.bot, button_id, prize, winners, end_time,
+                            channel.id, interaction.guild.id, interaction.user.id)
+
         await interaction.response.send_message(f"✅ Çekiliş {channel.mention} kanalında başlatıldı!")
         message = await channel.send(embed=embed, view=view)
 
@@ -55,10 +63,19 @@ class Giveaway(commands.Cog):
             'channel_id': channel.id,
             'guild_id': interaction.guild.id,
             'host_id': interaction.user.id,
-            'participants': []
+            'button_id': button_id,
+            'message_id': message.id
         }
+        # Katilimci listesi buton ID ile tutulur
+        self.giveaway_participants[button_id] = set()
 
         asyncio.create_task(self.wait_for_giveaway(message.id, seconds))
+
+    def _get_participant_ids(self, giveaway):
+        """Cekilis katilimcilarini buton listesinden al"""
+        button_id = giveaway.get('button_id')
+        ids = self.giveaway_participants.get(button_id, set())
+        return [i for i in ids if not self.bot.get_user(i).bot] if ids else []
 
     @app_commands.command(name='cekilis_bitir', description='Çekilişi erken bitir')
     @app_commands.describe(message_id='Çekiliş mesaj ID\'si')
@@ -82,14 +99,12 @@ class Giveaway(commands.Cog):
 
         try:
             message = await channel.fetch_message(message_id)
-            users = []
-            for msg_reaction in message.reactions:
-                if str(msg_reaction.emoji) == "🎉":
-                    users = [user async for user in msg_reaction.users() if not user.bot]
-                    break
+            user_ids = self._get_participant_ids(giveaway)
+            users = [self.bot.get_user(i) for i in user_ids]
+            users = [u for u in users if u is not None]
 
             if not users:
-                await channel.send("❌ Çekilişte katılımcı olmadı!")
+                await channel.send(f"❌ Çekilişe kimse katılmadı!\n**{len(user_ids)}** katılımcı kaydı bulundu.")
                 return
 
             winner_count = min(giveaway['winners'], len(users))
@@ -98,7 +113,7 @@ class Giveaway(commands.Cog):
 
             embed = discord.Embed(
                 title="🎉 Çekiliş Sonuçları",
-                description=f"**Ödül:** {giveaway['prize']}\n**Kazananlar:** {', '.join(winner_mentions)}",
+                description=f"**Ödül:** {giveaway['prize']}\n**Kazananlar:** {', '.join(winner_mentions)}\n**Katılımcı:** {len(users)}",
                 color=discord.Color.green(),
                 timestamp=datetime.now()
             )
@@ -205,14 +220,15 @@ class Giveaway(commands.Cog):
 
         try:
             message = await channel.fetch_message(message_id)
-            users = []
-            for msg_reaction in message.reactions:
-                if str(msg_reaction.emoji) == "🎉":
-                    users = [user async for user in msg_reaction.users() if not user.bot]
-                    break
+            user_ids = self._get_participant_ids(giveaway)
+            users = [self.bot.get_user(i) for i in user_ids]
+            users = [u for u in users if u is not None]
+
+            # Katilimci listesini temizle
+            self.giveaway_participants.pop(giveaway.get('button_id'), None)
 
             if not users:
-                await channel.send("❌ Çekilişte katılımcı olmadı!")
+                await channel.send(f"❌ Çekilişe kimse katılmadı! **{giveaway['prize']}** ödülü verilemedi.")
                 return
 
             winner_count = min(giveaway['winners'], len(users))
@@ -221,7 +237,7 @@ class Giveaway(commands.Cog):
 
             embed = discord.Embed(
                 title="🎉 Çekiliş Sonuçları",
-                description=f"**Ödül:** {giveaway['prize']}\n**Kazananlar:** {', '.join(winner_mentions)}",
+                description=f"**Ödül:** {giveaway['prize']}\n**Kazananlar:** {', '.join(winner_mentions)}\n**Katılımcı:** {len(users)}",
                 color=discord.Color.green(),
                 timestamp=datetime.now()
             )
@@ -231,9 +247,10 @@ class Giveaway(commands.Cog):
 
 
 class GiveawayView(discord.ui.View):
-    def __init__(self, bot, prize, winners, end_time, channel_id, guild_id, host_id):
+    def __init__(self, bot, button_id, prize, winners, end_time, channel_id, guild_id, host_id):
         super().__init__(timeout=None)
         self.bot = bot
+        self.button_id = button_id
         self.prize = prize
         self.winners = winners
         self.end_time = end_time
@@ -241,9 +258,28 @@ class GiveawayView(discord.ui.View):
         self.guild_id = guild_id
         self.host_id = host_id
 
-    @discord.ui.button(label="🎉 Katıl", style=discord.ButtonStyle.green, custom_id="giveaway_join")
+    @discord.ui.button(label="🎉 Katıl", style=discord.ButtonStyle.green)
     async def join(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("🎉 Çekilişe katıldın! Şanslı olsun!", ephemeral=True)
+        cog = self.bot.get_cog('Giveaway')
+        if not cog:
+            await interaction.response.send_message("❌ Çekiliş sistemi yüklenemedi!", ephemeral=True)
+            return
+
+        if self.button_id not in cog.giveaway_participants:
+            cog.giveaway_participants[self.button_id] = set()
+
+        participants = cog.giveaway_participants[self.button_id]
+        user_id = interaction.user.id
+
+        if user_id in participants:
+            participants.discard(user_id)
+            await interaction.response.send_message("↩️ Çekilişten çıktın!", ephemeral=True)
+        else:
+            participants.add(user_id)
+            await interaction.response.send_message(
+                f"🎉 Çekilişe katıldın! Şanslı olsun!\n**Katılımcı:** {len(participants)}",
+                ephemeral=True
+            )
 
 
 async def setup(bot):

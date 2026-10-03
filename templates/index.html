@@ -515,13 +515,38 @@
 
         <div id="tab-settings" class="tab-content">
             <div class="section">
-                <h2>Bot Ayarları</h2>
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 5px; color: #888;">Bot Durumu (Oyun Adı)</label>
+                <h2>Bot Durumu (Oynadığı Oyun)</h2>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; color: #888;">Oyun Adı</label>
                     <input type="text" id="bot-status" placeholder="FiveM" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #fff;">
                 </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; color: #888;">Büyük Resim (Asset ID)</label>
+                    <input type="text" id="bot-large-image" placeholder="fivem_logo" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #fff;">
+                    <small style="color: #666; display: block; margin-top: 4px;">Developer Portal → Rich Presence → Art Assets'te yüklediğin resmin adı</small>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; color: #888;">Büyük Resim Altındaki Yazı</label>
+                    <input type="text" id="bot-large-text" placeholder="FiveM Roleplay" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #fff;">
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; color: #888;">Küçük Resim (Asset ID)</label>
+                    <input type="text" id="bot-small-image" placeholder="" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #fff;">
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 5px; color: #888;">Küçük Resim Altındaki Yazı</label>
+                    <input type="text" id="bot-small-text" placeholder="" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #fff;">
+                </div>
+
                 <button class="refresh-btn" onclick="updateBotStatus()">💾 Kaydet</button>
+                <div id="settings-status" style="margin-top: 10px; color: #4caf50;"></div>
             </div>
+
             <div class="section">
                 <h2>Botu Sunucuya Ekle</h2>
                 <div id="bot-invite">
@@ -655,6 +680,9 @@
                     `;
                 }
 
+                // Bot ayarlarini forma yukle
+                await loadBotSettings();
+
                 document.getElementById('last-update').textContent = new Date().toLocaleString('tr-TR');
             } catch (e) {
                 console.error('Refresh error:', e);
@@ -662,16 +690,38 @@
         }
 
         async function updateBotStatus() {
-            const status = document.getElementById('bot-status').value;
+            const payload = {
+                status: document.getElementById('bot-status').value,
+                large_image: document.getElementById('bot-large-image').value,
+                large_text: document.getElementById('bot-large-text').value,
+                small_image: document.getElementById('bot-small-image').value,
+                small_text: document.getElementById('bot-small-text').value
+            };
+            const msg = document.getElementById('settings-status');
             try {
-                await fetch('/api/bot_settings', {
+                const res = await fetch('/api/bot_settings', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({status: status})
+                    body: JSON.stringify(payload)
                 });
-                alert('Bot durumu güncellendi!');
+                msg.style.color = res.ok ? '#4caf50' : '#f44336';
+                msg.textContent = res.ok ? '✅ Kaydedildi!' : '❌ Kaydedilemedi';
             } catch (e) {
-                alert('Hata: ' + e);
+                msg.style.color = '#f44336';
+                msg.textContent = '❌ Hata: ' + e;
+            }
+        }
+
+        async function loadBotSettings() {
+            try {
+                const s = await fetch('/api/bot_settings').then(r => r.json());
+                document.getElementById('bot-status').value = s.status || '';
+                document.getElementById('bot-large-image').value = s.large_image || '';
+                document.getElementById('bot-large-text').value = s.large_text || '';
+                document.getElementById('bot-small-image').value = s.small_image || '';
+                document.getElementById('bot-small-text').value = s.small_text || '';
+            } catch (e) {
+                console.error('Ayar yuklenemedi:', e);
             }
         }
 

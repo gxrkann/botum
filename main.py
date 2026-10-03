@@ -96,15 +96,41 @@ class Bot(commands.Bot):
     async def on_ready(self):
         logger.info(f'{self.user} has connected to Discord!')
         logger.info(f'Bot is in {len(self.guilds)} guilds')
-        
-        # Set bot status - Oyun oynuyor
+
+        await self.apply_activity()
+
+    def _load_activity_config(self):
+        """Dashboard'dan kaydedilen oyun/activity ayarlarini yukle"""
+        config = {
+            'status': get_env('BOT_STATUS', 'FiveM'),
+            'large_image': get_env('BOT_LARGE_IMAGE', None),
+            'large_text': get_env('BOT_LARGE_TEXT', None),
+            'small_image': get_env('BOT_SMALL_IMAGE', None),
+            'small_text': get_env('BOT_SMALL_TEXT', None)
+        }
+
+        try:
+            import json
+            with open('bot_config.json', 'r', encoding='utf-8') as f:
+                saved = json.load(f)
+            for key in config:
+                if saved.get(key):
+                    config[key] = saved[key]
+        except (FileNotFoundError, json.JSONDecodeError, ImportError):
+            pass
+
+        return config
+
+    async def apply_activity(self):
+        """Oynadigi oyun bilgisini guncelle"""
+        config = self._load_activity_config()
         activity = discord.Activity(
             type=discord.ActivityType.playing,
-            name=get_env('BOT_STATUS', 'FiveM'),
-            large_image=get_env('BOT_LARGE_IMAGE', None),
-            large_text=get_env('BOT_LARGE_TEXT', None),
-            small_image=get_env('BOT_SMALL_IMAGE', None),
-            small_text=get_env('BOT_SMALL_TEXT', None)
+            name=config['status'],
+            large_image=config['large_image'],
+            large_text=config['large_text'],
+            small_image=config['small_image'],
+            small_text=config['small_text']
         )
         await self.change_presence(activity=activity)
 

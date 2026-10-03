@@ -302,37 +302,63 @@ def api_bot_settings():
     if not bot:
         return jsonify({'error': 'Bot not available'}), 500
 
-    if request.method == 'GET':
-        return jsonify({
+    config_file = 'bot_config.json'
+
+    def load_config():
+        defaults = {
             'status': os.environ.get('BOT_STATUS', 'FiveM'),
             'large_image': os.environ.get('BOT_LARGE_IMAGE', ''),
             'large_text': os.environ.get('BOT_LARGE_TEXT', ''),
             'small_image': os.environ.get('BOT_SMALL_IMAGE', ''),
             'small_text': os.environ.get('BOT_SMALL_TEXT', '')
-        })
+        }
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                saved = json.load(f)
+            defaults.update({k: v for k, v in saved.items() if v})
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+        return defaults
+
+    if request.method == 'GET':
+        return jsonify(load_config())
 
     elif request.method == 'POST':
-        data = request.json
-        status = data.get('status')
-        large_image = data.get('large_image')
-        large_text = data.get('large_text')
-        small_image = data.get('small_image')
-        small_text = data.get('small_text')
+        data = request.json or {}
+        config = {
+            'status': data.get('status', 'FiveM') or 'FiveM',
+            'large_image': data.get('large_image', ''),
+            'large_text': data.get('large_text', ''),
+            'small_image': data.get('small_image', ''),
+            'small_text': data.get('small_text', '')
+        }
+
+        # Ayarlari kalici olarak kaydet
+        try:
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2)
+        except OSError as e:
+            print(f"[dashboard] Ayar kaydedilemedi: {e}", flush=True)
 
         activity = discord.Activity(
             type=discord.ActivityType.playing,
-            name=status or 'FiveM',
-            large_image=large_image or None,
-            large_text=large_text or None,
-            small_image=small_image or None,
-            small_text=small_text or None
+            name=config['status'],
+            large_image=config['large_image'] or None,
+            large_text=config['large_text'] or None,
+            small_image=config['small_image'] or None,
+            small_text=config['small_text'] or None
         )
 
         async def update_presence():
             await bot.change_presence(activity=activity)
 
-        asyncio.run_coroutine_threadsafe(update_presence(), bot.loop)
-        return jsonify({'success': True})
+        try:
+            asyncio.run_coroutine_threadsafe(update_presence(), bot.loop).result(timeout=10)
+            print(f"[dashboard] Durum guncellendi: {config['status']}", flush=True)
+            return jsonify({'success': True})
+        except Exception as e:
+            print(f"[dashboard] Durum guncellenemedi: {e}", flush=True)
+            return jsonify({'error': str(e)}), 500
 
 @app.route('/api/guard/<int:guild_id>', methods=['GET', 'POST'])
 def api_guard(guild_id):

@@ -148,6 +148,7 @@ class Database:
                 guild_id INTEGER,
                 user_id INTEGER,
                 amount INTEGER,
+                farm_type TEXT DEFAULT 'Belirtilmedi',
                 reason TEXT,
                 moderator_id INTEGER,
                 created_at TEXT
@@ -216,6 +217,28 @@ class Database:
         await self.connection.commit()
 
         await self._migrate_settings()
+        await self._migrate_farms()
+
+    async def _migrate_farms(self):
+        """farms tablosuna eksik kolonlari ekle"""
+        try:
+            async with self.connection.execute("PRAGMA table_info(farms)") as cursor:
+                rows = await cursor.fetchall()
+
+            if not rows:
+                return
+
+            existing = {row[1] for row in rows}
+
+            if 'farm_type' not in existing:
+                await self.connection.execute(
+                    "ALTER TABLE farms ADD COLUMN farm_type TEXT DEFAULT 'Belirtilmedi'"
+                )
+                print("[db] farms.farm_type kolonu eklendi", flush=True)
+
+            await self.connection.commit()
+        except Exception as e:
+            print(f"[db] farms migration hatasi: {e}", flush=True)
 
     async def _migrate_settings(self):
         """Eksik settings kolonlarini ekle (eski veritabanlari icin)"""

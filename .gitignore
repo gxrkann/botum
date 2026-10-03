@@ -259,3 +259,5 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 >>>>>>> 1f00cca2d1912e492673455b80834392b5c3da1b
+
+bot_config.json

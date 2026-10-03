@@ -17,11 +17,12 @@ class Farm(commands.Cog):
     @app_commands.command(name='farm_ekle', description='Farm ekle (onay bekler)')
     @app_commands.describe(
         member='Farm verilecek üye',
+        farm_type='Farm türü (örn: Şirket, Çiftlik, Balıkçılık)',
         amount='Farm miktarı',
         reason='Farm nedeni'
     )
     @app_commands.checks.has_permissions(manage_messages=True)
-    async def farm_ekle(self, interaction: discord.Interaction, member: discord.Member, amount: int, reason: str = "Belirtilmedi"):
+    async def farm_ekle(self, interaction: discord.Interaction, member: discord.Member, farm_type: str, amount: int, reason: str = "Belirtilmedi"):
         if amount <= 0:
             await interaction.response.send_message("❌ Farm miktarı 0'dan büyük olmalı!", ephemeral=True)
             return
@@ -32,6 +33,7 @@ class Farm(commands.Cog):
             'guild_id': interaction.guild.id,
             'user_id': member.id,
             'amount': amount,
+            'farm_type': farm_type,
             'reason': reason,
             'moderator_id': interaction.user.id
         }
@@ -42,6 +44,7 @@ class Farm(commands.Cog):
             color=discord.Color.gold(),
             timestamp=datetime.now()
         )
+        embed.add_field(name="Farm Türü", value=farm_type, inline=False)
         embed.add_field(name="Neden", value=reason, inline=False)
         embed.add_field(name="Yetkili", value=f"{interaction.user.mention}", inline=False)
 
@@ -168,9 +171,11 @@ class FarmApprovalView(discord.ui.View):
             return
 
         await self.bot.db.connection.execute(
-            '''INSERT INTO farms (guild_id, user_id, amount, reason, moderator_id, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)''',
-            (farm_data['guild_id'], farm_data['user_id'], farm_data['amount'], farm_data['reason'], farm_data['moderator_id'], datetime.now().isoformat())
+            '''INSERT INTO farms (guild_id, user_id, amount, farm_type, reason, moderator_id, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)''',
+            (farm_data['guild_id'], farm_data['user_id'], farm_data['amount'],
+             farm_data.get('farm_type', 'Belirtilmedi'), farm_data['reason'],
+             farm_data['moderator_id'], datetime.now().isoformat())
         )
         await self.bot.db.connection.commit()
 
@@ -185,6 +190,7 @@ class FarmApprovalView(discord.ui.View):
             moderator = interaction.guild.get_member(farm_data['moderator_id'])
             embed.add_field(name="Üye", value=f"{user.mention if user else farm_data['user_id']} ({farm_data['user_id']})", inline=False)
             embed.add_field(name="Miktar", value=f"{farm_data['amount']} 🪙", inline=False)
+            embed.add_field(name="Farm Türü", value=farm_data.get('farm_type', 'Belirtilmedi'), inline=False)
             embed.add_field(name="Neden", value=farm_data['reason'], inline=False)
             embed.add_field(name="Yetkili", value=f"{moderator.mention if moderator else farm_data['moderator_id']}", inline=False)
             if user:
