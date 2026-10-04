@@ -249,6 +249,9 @@ class Database:
                 user_id INTEGER,
                 weapon_name TEXT,
                 price INTEGER,
+                marka TEXT,
+                silah_kategori TEXT,
+                adet INTEGER DEFAULT 1,
                 moderator_id INTEGER,
                 created_at TEXT
             )
@@ -304,6 +307,37 @@ class Database:
 
         await self._migrate_settings()
         await self._migrate_farms()
+        await self._migrate_fivem()
+
+    async def _migrate_fivem(self):
+        """fivem_weapons tablosuna marka / kategori / adet kolonlarini ekle"""
+        yeni = [
+            ('marka', 'TEXT'),
+            ('silah_kategori', 'TEXT'),
+            ('adet', 'INTEGER DEFAULT 1'),
+        ]
+
+        try:
+            async with self.connection.execute(
+                "PRAGMA table_info(fivem_weapons)"
+            ) as cursor:
+                rows = await cursor.fetchall()
+
+            if not rows:
+                return
+
+            existing = {row[1] for row in rows}
+
+            for col, coltype in yeni:
+                if col not in existing:
+                    await self.connection.execute(
+                        f'ALTER TABLE fivem_weapons ADD COLUMN {col} {coltype}'
+                    )
+                    print(f"[db] fivem_weapons -> {col} eklendi", flush=True)
+
+            await self.connection.commit()
+        except Exception as e:
+            print(f"[db] fivem migration hatasi: {e}", flush=True)
 
     async def _migrate_farms(self):
         """farms tablosuna eksik kolonlari ekle"""
@@ -349,6 +383,10 @@ class Database:
             ('uyari_rolleri', 'TEXT'),
             ('rodeo_rolleri', 'TEXT'),
             ('rodeo_mod', 'TEXT'),
+            # Silah tablosu - marka / kategori / adet kolonlari
+            ('marka', 'TEXT'),
+            ('silah_kategori', 'TEXT'),
+            ('adet', 'INTEGER DEFAULT 1'),
         ]
 
         try:
