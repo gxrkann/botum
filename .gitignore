@@ -265,3 +265,5 @@ bot_config.json
 _validate.py
 _test_commands.py
 _fix_optional.py
+
+dashboard_theme.json

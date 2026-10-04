@@ -110,11 +110,11 @@ def api_guild(guild_id):
     data = {
         'id': guild.id,
         'name': guild.name,
-        'member_count': guild.member_count,
+        'member_count': guild.member_count or 0,
         'channel_count': len(guild.channels),
         'role_count': len(guild.roles),
         'icon': str(guild.icon.url) if guild.icon else None,
-        'created_at': guild.created_at.isoformat(),
+        'created_at': guild.created_at.isoformat() if guild.created_at else None,
         'owner': str(guild.owner) if guild.owner else None,
     }
     return jsonify(data)
@@ -175,22 +175,22 @@ def api_farm(guild_id):
             'SELECT COUNT(*), COALESCE(SUM(amount), 0) FROM farms WHERE guild_id = ?',
             (guild_id,)
         ) as cursor:
-            total = await cursor.fetchone()
+            total = await cursor.fetchone() or (0, 0)
 
         async with bot.db.connection.execute(
             '''SELECT user_id, COUNT(*) as farm_count, SUM(amount) as total_amount
                FROM farms WHERE guild_id = ? GROUP BY user_id ORDER BY total_amount DESC LIMIT 10''',
             (guild_id,)
         ) as cursor:
-            users = await cursor.fetchall()
+            users = await cursor.fetchall() or []
 
         return {
-            'total_farms': total[0],
-            'total_amount': total[1],
+            'total_farms': total[0] or 0,
+            'total_amount': total[1] or 0,
             'users': [{'user_id': u[0], 'count': u[1], 'amount': u[2]} for u in users]
         }
 
-    result = asyncio.run_coroutine_threadsafe(get_farm_stats(), bot.loop).result()
+    result = run_async(get_farm_stats())
     return jsonify(result)
 
 @app.route('/api/fivem/<int:guild_id>')
@@ -205,21 +205,21 @@ def api_fivem(guild_id):
             'SELECT COUNT(*), COALESCE(SUM(price), 0) FROM fivem_weapons WHERE guild_id = ?',
             (guild_id,)
         ) as cursor:
-            weapons = await cursor.fetchone()
+            weapons = await cursor.fetchone() or (0, 0)
 
         async with bot.db.connection.execute(
             'SELECT COUNT(*) FROM fivem_weapons_lost WHERE guild_id = ?',
             (guild_id,)
         ) as cursor:
-            lost = await cursor.fetchone()
+            lost = await cursor.fetchone() or (0,)
 
         return {
-            'total_weapons': weapons[0],
-            'total_value': weapons[1],
-            'total_lost': lost[0]
+            'total_weapons': weapons[0] or 0,
+            'total_value': weapons[1] or 0,
+            'total_lost': lost[0] or 0
         }
 
-    result = asyncio.run_coroutine_threadsafe(get_fivem_stats(), bot.loop).result()
+    result = run_async(get_fivem_stats())
     return jsonify(result)
 
 @app.route('/api/giveaways')
@@ -290,7 +290,7 @@ def api_reload(cog):
         except Exception as e:
             return str(e)
 
-    result = asyncio.run_coroutine_threadsafe(do_reload(), bot.loop).result()
+    result = run_async(do_reload())
     if result is True:
         return jsonify({'success': True})
     return jsonify({'error': result}), 500
@@ -353,7 +353,7 @@ def api_bot_settings():
             await bot.change_presence(activity=activity)
 
         try:
-            asyncio.run_coroutine_threadsafe(update_presence(), bot.loop).result(timeout=10)
+            run_async(update_presence(), timeout=10)
             print(f"[dashboard] Durum guncellendi: {config['status']}", flush=True)
             return jsonify({'success': True})
         except Exception as e:
@@ -379,7 +379,7 @@ def api_guard(guild_id):
                     return json.loads(row[0])
                 return None
 
-        result = asyncio.run_coroutine_threadsafe(get_guard(), bot.loop).result()
+        result = run_async(get_guard())
         return jsonify(result or {'error': 'Guard not configured'})
 
     elif request.method == 'POST':
@@ -397,7 +397,7 @@ def api_guard(guild_id):
             )
             await bot.db.connection.commit()
 
-        asyncio.run_coroutine_threadsafe(update_guard(), bot.loop)
+        run_async(update_guard())
         return jsonify({'success': True})
 
 @app.route('/api/bot_profile', methods=['GET', 'POST'])
@@ -452,9 +452,7 @@ def api_bot_profile():
         return False, []
 
     try:
-        ok, changed = asyncio.run_coroutine_threadsafe(
-            apply_profile(), bot.loop
-        ).result(timeout=20)
+        ok, changed = run_async(apply_profile(), timeout=20)
 
         if ok:
             print(f"[dashboard] Guncellendi: {changed}", flush=True)
@@ -463,6 +461,91 @@ def api_bot_profile():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/dashboard_theme', methods=['GET', 'POST'])
+def api_dashboard_theme():
+    """Dashboard tema/ozellestirme ayarlari"""
+    config_file = 'dashboard_theme.json'
+
+    DEFAULTS = {
+        'title': 'Discord Bot Dashboard',
+        'subtitle': 'Bot kontrol paneli',
+        'accent_color': '#00d4ff',
+        'accent_color_2': '#7b2cbf',
+        'bg_color': '#1a1a2e',
+        'bg_color_2': '#16213e',
+        'card_bg': 'rgba(255,255,255,0.05)',
+        'font_family': "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+        'refresh_interval': 30,
+        'hide_tabs': [],
+        'show_stats': True,
+        'rounded_corners': 12
+    }
+
+    def load():
+        cfg = dict(DEFAULTS)
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                saved = json.load(f)
+            for k, v in saved.items():
+                if k in DEFAULTS and v is not None:
+                    cfg[k] = v
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+        return cfg
+
+    if request.method == 'GET':
+        return jsonify(load())
+
+    data = request.json or {}
+    cfg = load()
+
+    # Renk dogrulama (sadece hex)
+    import re
+    hex_pattern = re.compile(r'^#[0-9a-fA-F]{6}$')
+
+    for key in ('accent_color', 'accent_color_2', 'bg_color', 'bg_color_2'):
+        val = data.get(key)
+        if val and hex_pattern.match(val.strip()):
+            cfg[key] = val.strip()
+
+    if 'title' in data and data['title'].strip():
+        cfg['title'] = data['title'].strip()[:60]
+    if 'subtitle' in data and data['subtitle'].strip():
+        cfg['subtitle'] = data['subtitle'].strip()[:120]
+    if 'font_family' in data and data['font_family'].strip():
+        cfg['font_family'] = data['font_family'].strip()[:100]
+
+    try:
+        interval = int(data.get('refresh_interval', cfg['refresh_interval']))
+        if 5 <= interval <= 600:
+            cfg['refresh_interval'] = interval
+    except (TypeError, ValueError):
+        pass
+
+    try:
+        corners = int(data.get('rounded_corners', cfg['rounded_corners']))
+        cfg['rounded_corners'] = max(0, min(30, corners))
+    except (TypeError, ValueError):
+        pass
+
+    if 'show_stats' in data:
+        cfg['show_stats'] = bool(data['show_stats'])
+
+    if 'hide_tabs' in data and isinstance(data['hide_tabs'], list):
+        valid = {'commands', 'logs', 'backups', 'farm', 'fivem',
+                 'giveaways', 'voice', 'guard', 'settings'}
+        cfg['hide_tabs'] = [t for t in data['hide_tabs'] if t in valid]
+
+    try:
+        with open(config_file, 'w', encoding='utf-8') as f:
+            json.dump(cfg, f, indent=2, ensure_ascii=False)
+        print("[dashboard] Tema guncellendi", flush=True)
+    except OSError as e:
+        return jsonify({'error': str(e)}), 500
+
+    return jsonify(cfg)
+
 
 @app.route('/api/bot_invite')
 def api_bot_invite():
@@ -491,6 +574,14 @@ def api_bot_add(guild_id):
 async def setup(bot):
     print("[DASHBOARD] Cog yukleniyor...", flush=True)
     app.config['BOT'] = bot
+
+    # bot.loop sadece async context icinde okunabilir.
+    # Flask ayri thread'de calistigi icin loop referansini simdiden saklayalim.
+    try:
+        app.config['BOT_LOOP'] = asyncio.get_running_loop()
+    except RuntimeError:
+        app.config['BOT_LOOP'] = None
+
     cog = Dashboard(bot)
     await bot.add_cog(cog)
     print(f"[DASHBOARD] Port: {cog.port}, Bot hazir mi: {bot.is_ready()}", flush=True)
@@ -500,3 +591,13 @@ async def setup(bot):
     if bot.is_ready():
         await asyncio.sleep(0.5)
         await cog.start_dashboard()
+
+
+def run_async(coro, timeout=15):
+    """Flask thread'inden bot loop'una coroutine calistirir"""
+    loop = app.config.get('BOT_LOOP')
+    if loop is None or loop.is_closed():
+        raise RuntimeError('Bot loopu erisilebilir degil')
+
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    return future.result(timeout=timeout)
