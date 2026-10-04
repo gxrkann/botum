@@ -453,6 +453,10 @@ def api_bot_profile():
     if errors:
         return jsonify({'error': ' | '.join(errors)}), 400
 
+    # Ayni URL tekrar gonderiliyorsa guncelleme yapma
+    if not errors and not (data.get('avatar') or '').strip() and not (data.get('banner') or '').strip():
+        return jsonify({'error': 'Profil Resmi veya Banner URL adresi giriniz'}), 400
+
     async def apply_profile():
         avatar_bytes = None
         banner_bytes = None
@@ -466,16 +470,20 @@ def api_bot_profile():
                     if resp.status == 200:
                         content = await resp.read()
                         if len(content) > 8 * 1024 * 1024:
-                            print(f"[dashboard] {kind} cok buyuk", flush=True)
+                            errors.append(f'{kind}: Resim 8 MB dan buyuk')
                             continue
                         if kind == 'avatar':
                             avatar_bytes = content
                         else:
                             banner_bytes = content
                     else:
-                        print(f"[dashboard] {kind} indirilemedi: HTTP {resp.status}", flush=True)
+                        msg = f'{kind}: Discord CDN adresi dondu (HTTP {resp.status}). Linkin sonu gecersiz olabilir.'
+                        errors.append(msg)
+                        print(f"[dashboard] {msg}", flush=True)
             except Exception as e:
-                print(f"[dashboard] {kind} hatasi: {e}", flush=True)
+                msg = f'{kind}: Indirme hatasi ({type(e).__name__})'
+                errors.append(msg)
+                print(f"[dashboard] {msg}: {e}", flush=True)
 
         kwargs = {}
         if avatar_bytes:
@@ -483,18 +491,27 @@ def api_bot_profile():
         if banner_bytes:
             kwargs['banner'] = banner_bytes
 
-        if kwargs:
+        if not kwargs:
+            if errors:
+                return False, errors
+            # Hicbir URL girilmemis
+            return False, ['Profil Resmi veya Banner URL adresi giriniz']
+
+        try:
             await bot.user.edit(**kwargs)
             return True, list(kwargs.keys())
-        return False, []
+        except discord.Forbidden:
+            return False, ['Discord bu degisiklige izin vermedi (bot yetkisi yetersiz)']
+        except discord.HTTPException as e:
+            return False, [f'Discord reddetti: {e.status} - Banner icin bot 2+ sunucuda olmali']
 
     try:
-        ok, changed = run_async(apply_profile(), timeout=20)
+        ok, result = run_async(apply_profile(), timeout=25)
 
         if ok:
-            print(f"[dashboard] Guncellendi: {changed}", flush=True)
-            return jsonify({'success': True, 'changed': changed})
-        return jsonify({'error': 'Gecerli URL girilmedi veya resim indirilemadi'}), 400
+            print(f"[dashboard] Guncellendi: {result}", flush=True)
+            return jsonify({'success': True, 'changed': result})
+        return jsonify({'error': ' | '.join(result)}), 400
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
