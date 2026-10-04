@@ -326,6 +326,127 @@ def api_reload(cog):
         return jsonify({'success': True})
     return jsonify({'error': result}), 500
 
+@app.route('/api/guild_roles', methods=['GET'])
+def api_guild_roles():
+    """Sunucudaki rollerin listesi (dashboard rol yonetimi icin)"""
+    bot = app.config.get('BOT')
+    if not bot:
+        return jsonify({'error': 'Bot not available'}), 500
+
+    guild_id = request.args.get('guild_id')
+    if not guild_id:
+        return jsonify({'error': 'Sunucu secilmedi'}), 400
+
+    try:
+        guild = resolve_guild(bot, guild_id)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Gecersiz sunucu numarasi'}), 400
+
+    if not guild:
+        return jsonify({'error': 'Sunucu bulunamadi'}), 404
+
+    me = guild.me
+
+    roller = []
+    for r in guild.roles:
+        # @everyone rolunu ve yonetici rolunu gosterme (kullanilamaz)
+        if r.is_default() or r.permissions.administrator:
+            continue
+        roller.append({
+            'id': str(r.id),
+            'name': r.name,
+            'color': str(r.color),
+            'members': len(r.members),
+            'position': r.position,
+            'managed': r.managed,
+            # Bot bu rolu verebilir mi?
+            'assignable': r.position < me.top_role.position,
+        })
+
+    # Yukariya Once en yuksek roller
+    roller.sort(key=lambda x: -x['position'])
+
+    return jsonify({
+        'roles': roller,
+        'bot_top_role': me.top_role.name if me.top_role else '?',
+        'total': len(guild.roles),
+    })
+
+@app.route('/api/roller', methods=['GET', 'POST'])
+def api_roller():
+    """Rodeo (girise otomatik rol) ayarlari - dashboard uzerinden"""
+    bot = app.config.get('BOT')
+    if not bot:
+        return jsonify({'error': 'Bot not available'}), 500
+
+    import json as _json
+
+    if request.method == 'POST':
+        data = request.json or {}
+        guild_id = data.get('guild_id')
+        if not guild_id:
+            return jsonify({'error': 'Sunucu secilmedi'}), 400
+
+        try:
+            guild_id = int(guild_id)
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Gecersiz sunucu numarasi'}), 400
+
+        roller = data.get('roles') or []
+        if not isinstance(roller, list):
+            return jsonify({'error': 'Gecersiz rol listesi'}), 400
+
+        # Sadece sayilari al
+        temiz = []
+        for x in roller:
+            try:
+                temiz.append(int(x))
+            except (ValueError, TypeError):
+                continue
+
+        mod = data.get('mod') if data.get('mod') in ('hepsi', 'rastgele') else 'hepsi'
+
+        async def save():
+            await bot.db.update_setting(guild_id, 'rodeo_rolleri',
+                                       _json.dumps(temiz))
+            await bot.db.update_setting(guild_id, 'rodeo_mod', mod)
+
+        try:
+            run_async(save())
+        except Exception as e:
+            return jsonify({'error': f'Kaydedilemedi: {e}'}), 500
+
+        return jsonify({'success': True, 'count': len(temiz), 'mod': mod})
+
+    # GET
+    guild_id = request.args.get('guild_id')
+    if not guild_id:
+        return jsonify({'error': 'Sunucu secilmedi'}), 400
+
+    try:
+        guild_id = int(guild_id)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Gecersiz sunucu numarasi'}), 400
+
+    async def load():
+        s = await bot.db.get_settings(guild_id) or {}
+        raw = s.get('rodeo_rolleri')
+        secili = []
+        if raw:
+            try:
+                secili = [int(x) for x in _json.loads(raw)]
+            except (ValueError, TypeError, AttributeError):
+                secili = []
+        return {
+            'roles': secili,
+            'mod': s.get('rodeo_mod') or 'hepsi',
+        }
+
+    try:
+        return jsonify(run_async(load()))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/guard_threat', methods=['GET', 'POST'])
 def api_guard_threat():
     """Guard tehdit seviyesi, olaylar, supheli kullanicilar"""

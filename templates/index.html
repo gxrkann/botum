@@ -460,7 +460,7 @@
         </div>
 
         <div class="tabs">
-            <div class="tab active" data-tab="guilds" onclick="showTab('guilds')">🏠 Sunucular</div>
+            <div class="tab active" data-tab="guilds" onclick="showTab('guilds'); initRolePanel();">🏠 Sunucular</div>
             <div class="tab" data-tab="commands" onclick="showTab('commands')">⌨️ Komutlar</div>
             <div class="tab" data-tab="logs" onclick="showTab('logs')">📋 Loglar</div>
             <div class="tab" data-tab="backups" onclick="showTab('backups')">💾 Yedekler</div>
@@ -480,6 +480,66 @@
                 <div class="guild-list" id="guild-list">
                     <p style="color: #888;">Yükleniyor...</p>
                 </div>
+            </div>
+
+            <div class="section">
+                <h2>🎪 Girince Otomatik Rol (Rodeo)</h2>
+                <p style="color:#888;margin-bottom:15px;">
+                    Sunucuya giren herkese otomatik verilecek rolleri buradan seç.
+                </p>
+
+                <div style="margin-bottom:15px;">
+                    <label style="display:block;margin-bottom:5px;color:#888;">Sunucu</label>
+                    <select id="role-guild" onchange="loadRodeoRoles()"
+                            style="width:100%;padding:10px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;">
+                        <option value="">Yükleniyor...</option>
+                    </select>
+                </div>
+
+                <div style="margin-bottom:15px;">
+                    <label style="display:block;margin-bottom:8px;color:#888;">Veriliş Şekli</label>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <button id="rodeo-mod-hepsi" class="refresh-btn" onclick="setRodeoMod('hepsi')"
+                                style="background:linear-gradient(90deg,#2ecc71,#27ae60);">
+                            Tümünü Ver
+                        </button>
+                        <button id="rodeo-mod-rastgele" class="refresh-btn" onclick="setRodeoMod('rastgele')"
+                                style="background:linear-gradient(90deg,#9b59b6,#8e44ad);">
+                            Rastgele 1 Rol
+                        </button>
+                    </div>
+                    <small style="color:#666;">Seçili: <b id="rodeo-mod-text">—</b></small>
+                </div>
+
+                <div style="margin-bottom:12px;">
+                    <label style="display:block;margin-bottom:5px;color:#888;">
+                        Roller <span id="role-count" style="color:#4CAF50;"></span>
+                    </label>
+                    <input type="search" id="role-search" placeholder="Rol ara..."
+                           oninput="filterRoles()"
+                           style="width:100%;padding:10px;margin-bottom:10px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;">
+                    <div id="role-list"
+                         style="max-height:400px;overflow-y:auto;border:1px solid var(--card-border);
+                                border-radius:calc(var(--radius)*0.5);padding:8px;">
+                        <p style="color:#888;padding:8px;">Yükleniyor...</p>
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <button class="refresh-btn" onclick="saveRodeoRoles()">💾 Kaydet</button>
+                    <button class="refresh-btn" onclick="loadRodeoRoles()"
+                            style="background:linear-gradient(90deg,#636e72,#4a4a4a);">🔄 Yenile</button>
+                    <button class="refresh-btn" onclick="selectAllRoles(true)"
+                            style="background:linear-gradient(90deg,#27ae60,#1e8449);">✓ Tümünü Seç</button>
+                    <button class="refresh-btn" onclick="selectAllRoles(false)"
+                            style="background:linear-gradient(90deg,#c0392b,#922b21);">✕ Seçimi Kaldır</button>
+                </div>
+                <div id="role-status" style="margin-top:10px;font-size:0.9em;"></div>
+
+                <p style="color:#666;font-size:0.85em;margin-top:15px;">
+                    ⚠️ <b>Yeşil</b> roller bot tarafından verilebilir.
+                    <b>Kırmızı</b> roller bot rolünden yukarıda — verilemez.
+                </p>
             </div>
         </div>
 
@@ -1301,6 +1361,165 @@
             restartRefresh();
         }
 
+        // ==================== RODEO / ROL YONETIMI ====================
+        let ROL_LISTESI = [];
+        let RODEO_SECILI = [];
+        let RODEO_MOD = 'hepsi';
+
+        async function initRolePanel() {
+            const sel = document.getElementById('role-guild');
+            if (!sel || sel.dataset.loaded === '1') return;
+            sel.dataset.loaded = '1';
+
+            try {
+                const d = await fetch('/api/voice_control').then(r => r.json());
+                if (d.guilds && d.guilds.length) {
+                    sel.innerHTML = d.guilds.map(g =>
+                        `<option value="${g.id}">${g.name}</option>`).join('');
+                    loadRodeoRoles();
+                } else {
+                    sel.innerHTML = '<option value="">Bot sunucuda değil</option>';
+                }
+            } catch (e) {
+                sel.innerHTML = '<option value="">Yüklenemedi</option>';
+            }
+        }
+
+        function renderRoles() {
+            const box = document.getElementById('role-list');
+            const ara = (document.getElementById('role-search').value || '').toLowerCase();
+
+            const gosterilecek = ROL_LISTESI.filter(r =>
+                !ara || r.name.toLowerCase().includes(ara));
+
+            if (!gosterilecek.length) {
+                box.innerHTML = '<p style="color:#888;padding:8px;">Rol bulunamadı</p>';
+                return;
+            }
+
+            box.innerHTML = gosterilecek.map(r => {
+                const secili = RODEO_SECILI.includes(r.id);
+                const renk = r.assignable ? '#2ecc71' : '#e74c3c';
+                const baslik = r.assignable ? 'Bot verebilir' : 'Bot veremez (çok yukarıda)';
+                return `
+                    <label style="display:flex;align-items:center;gap:10px;padding:7px 8px;
+                                   border-radius:calc(var(--radius)*0.3);cursor:pointer;
+                                   border-left:3px solid ${renk};
+                                   background:${secili ? 'rgba(46,204,113,0.12)' : 'transparent'};">
+                        <input type="checkbox" ${secili ? 'checked' : ''}
+                               ${r.assignable ? '' : 'disabled'}
+                               onchange="toggleRodeoRole('${r.id}', this.checked)"
+                               style="width:18px;height:18px;cursor:pointer;">
+                        <span style="flex:1;">${r.name}</span>
+                        <span style="color:#888;font-size:0.85em;">👥 ${r.members}</span>
+                        ${r.managed ? '<span style="color:#f39c12;font-size:0.8em;">Entegre</span>' : ''}
+                        <span style="color:${renk};font-size:0.8em;">●</span>
+                    </label>`;
+            }).join('');
+
+            document.getElementById('role-count').textContent =
+                `(${RODEO_SECILI.length} seçili)`;
+        }
+
+        function filterRoles() { renderRoles(); }
+
+        function toggleRodeoRole(id, checked) {
+            if (checked) {
+                if (!RODEO_SECILI.includes(id)) RODEO_SECILI.push(id);
+            } else {
+                RODEO_SECILI = RODEO_SECILI.filter(x => x !== id);
+            }
+            renderRoles();
+        }
+
+        function selectAllRoles(tum) {
+            RODEO_SECILI = tum
+                ? ROL_LISTESI.filter(r => r.assignable).map(r => r.id)
+                : [];
+            renderRoles();
+        }
+
+        function setRodeoMod(mod) {
+            RODEO_MOD = mod;
+            document.getElementById('rodeo-mod-text').textContent =
+                mod === 'rastgele' ? 'Rastgele 1 rol' : 'Tüm roller';
+            document.getElementById('rodeo-mod-hepsi').style.outline =
+                mod === 'hepsi' ? '2px solid #2ecc71' : 'none';
+            document.getElementById('rodeo-mod-rastgele').style.outline =
+                mod === 'rastgele' ? '2px solid #9b59b6' : 'none';
+        }
+
+        async function loadRodeoRoles() {
+            const gid = document.getElementById('role-guild').value;
+            const st = document.getElementById('role-status');
+            if (!gid) return;
+
+            st.style.color = '#888';
+            st.textContent = 'Yükleniyor...';
+
+            try {
+                const [roller, ayar] = await Promise.all([
+                    fetch('/api/guild_roles?guild_id=' + encodeURIComponent(gid)).then(r => r.json()),
+                    fetch('/api/roller?guild_id=' + encodeURIComponent(gid)).then(r => r.json()),
+                ]);
+
+                if (roller.error) {
+                    document.getElementById('role-list').innerHTML =
+                        `<p style="color:#f44336;padding:8px;">${roller.error}</p>`;
+                    st.style.color = '#f44336';
+                    st.textContent = '❌ ' + roller.error;
+                    return;
+                }
+
+                ROL_LISTESI = roller.roles || [];
+                // API string donduruyor, string olarak eslestir
+                RODEO_SECILI = (ayar.roles || []).map(String);
+                setRodeoMod(ayar.mod || 'hepsi');
+
+                renderRoles();
+
+                st.style.color = '#4CAF50';
+                st.textContent = `✅ ${ROL_LISTESI.length} rol yüklendi ` +
+                    `(bot rolü: ${roller.bot_top_role})`;
+
+            } catch (e) {
+                st.style.color = '#f44336';
+                st.textContent = '❌ ' + e.message;
+            }
+        }
+
+        async function saveRodeoRoles() {
+            const gid = document.getElementById('role-guild').value;
+            const st = document.getElementById('role-status');
+            if (!gid) { st.style.color = '#f44336'; st.textContent = '❌ Sunucu seçin'; return; }
+
+            st.style.color = '#888';
+            st.textContent = 'Kaydediliyor...';
+
+            try {
+                const d = await fetch('/api/roller', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        guild_id: gid,
+                        roles: RODEO_SECILI,
+                        mod: RODEO_MOD
+                    })
+                }).then(r => r.json());
+
+                if (d.error) {
+                    st.style.color = '#f44336';
+                    st.textContent = '❌ ' + d.error;
+                } else {
+                    st.style.color = '#4CAF50';
+                    st.textContent = `✅ ${d.count} rol kaydedildi! Artık girenlere verilecek.`;
+                }
+            } catch (e) {
+                st.style.color = '#f44336';
+                st.textContent = '❌ ' + e.message;
+            }
+        }
+
         // ==================== GUARD TEHDIT PANELI ====================
         async function loadThreat() {
             const sel = document.getElementById('threat-guild');
@@ -1733,6 +1952,7 @@
             loadBotProfile().catch(e => console.error('Bot profili yuklenemedi:', e));
             loadVoiceGuilds().catch(e => console.error('Ses kanallari yuklenemedi:', e));
             refreshData().catch(e => console.error('Veriler yenilenemedi:', e));
+            initRolePanel().catch(e => console.error('Rol paneli yuklenemedi:', e));
             restartRefresh();
         }
 
