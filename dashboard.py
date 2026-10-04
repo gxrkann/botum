@@ -10,6 +10,33 @@ from datetime import datetime
 
 app = Flask(__name__)
 
+
+def resolve_guild(bot, raw_id):
+    """
+    Guild ID'sini cozer.
+
+    Discord snowflake ID'leri 2^53'ten buyuk oldugu icin JSON'da sayi olarak
+    gonderilirse JavaScript bunu yuvarlar ve ID bozulur. API'lerimiz ID'leri
+    string donduruyor ama yine de bozulmus bir ID gelirse (eski arayuz, onbellek)
+    asagidaki toleransli eslestirmeyle kurtarmaya calisir.
+
+    JavaScript double hassasiyeti 1.5e17 civarinda en fazla ~16 sapma yapar.
+    """
+    try:
+        gid = int(raw_id)
+    except (TypeError, ValueError):
+        return None
+
+    guild = bot.get_guild(gid)
+    if guild:
+        return guild
+
+    # Bozuk ID olabilir - yakin bir guild var mi bak
+    for g in bot.guilds:
+        if abs(g.id - gid) <= 64:
+            return g
+    return None
+
 class Dashboard(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -90,7 +117,10 @@ def api_guilds():
     guilds = []
     for guild in bot.guilds:
         guilds.append({
-            'id': guild.id,
+            # Discord snowflake ID'leri 2^53'ten buyuk. JSON'da sayi olarak
+            # gonderilirse JavaScript (IEEE 754) bozar ve sunucu bulunamaz.
+            # Her zaman string gonderiyoruz.
+            'id': str(guild.id),
             'name': guild.name,
             'member_count': guild.member_count,
             'icon': str(guild.icon.url) if guild.icon else None,
@@ -109,7 +139,7 @@ def api_guild(guild_id):
         return jsonify({'error': 'Guild not found'}), 404
 
     data = {
-        'id': guild.id,
+        'id': str(guild.id),
         'name': guild.name,
         'member_count': guild.member_count or 0,
         'channel_count': len(guild.channels),
@@ -188,7 +218,7 @@ def api_farm(guild_id):
         return {
             'total_farms': total[0] or 0,
             'total_amount': total[1] or 0,
-            'users': [{'user_id': u[0], 'count': u[1], 'amount': u[2]} for u in users]
+            'users': [{'user_id': str(u[0]), 'count': u[1], 'amount': u[2]} for u in users]
         }
 
     result = run_async(get_farm_stats())
@@ -269,7 +299,7 @@ def api_voice(guild_id):
         member = guild.get_member(int(user_id))
         if member:
             stats.append({
-                'user_id': int(user_id),
+                'user_id': str(user_id),
                 'name': member.name,
                 'total_seconds': data['total_seconds']
             })
@@ -581,7 +611,7 @@ def api_voice_control():
                 time.sleep(0.25)
                 waited += 0.25
 
-            guilds = [{'id': g.id, 'name': g.name} for g in bot.guilds]
+            guilds = [{'id': str(g.id), 'name': g.name} for g in bot.guilds]
             if not guilds:
                 return jsonify({
                     'guilds': [],
@@ -590,7 +620,7 @@ def api_voice_control():
             return jsonify({'guilds': guilds})
 
         try:
-            guild = bot.get_guild(int(guild_id))
+            guild = resolve_guild(bot, guild_id)
         except (ValueError, TypeError):
             return jsonify({'error': 'Gecersiz sunucu numarasi'}), 400
 
@@ -599,7 +629,7 @@ def api_voice_control():
 
         channels = [
             {
-                'id': ch.id,
+                'id': str(ch.id),
                 'name': ch.name,
                 'members': len(ch.members),
                 'user_limit': ch.user_limit or 0
@@ -611,7 +641,7 @@ def api_voice_control():
         for vc in bot.voice_clients:
             if vc.guild.id == guild.id:
                 current = {
-                    'channel_id': vc.channel.id if vc.channel else None,
+                    'channel_id': str(vc.channel.id) if vc.channel else None,
                     'channel_name': vc.channel.name if vc.channel else None
                 }
                 break
