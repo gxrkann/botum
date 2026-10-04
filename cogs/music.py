@@ -2,7 +2,6 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import asyncio
-import yt_dlp
 import re
 from urllib.parse import urlparse
 
@@ -12,6 +11,8 @@ class Music(commands.Cog):
         self.queues = {}
         self.current = {}
         self.loop_mode = {}
+        # yt_dlp agir bir modul - sadece gercekten kullanilanda yukle
+        self._yt_dlp = None
         self.volumes = {}
 
         self.ydl_opts = {
@@ -105,7 +106,17 @@ class Music(commands.Cog):
 
         # Search for song
         try:
-            with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
+            # yt_dlp agir bir modul - ilk kullanimda yukle
+            if self._yt_dlp is None:
+                try:
+                    import yt_dlp
+                    self._yt_dlp = yt_dlp
+                except ImportError:
+                    await interaction.response.send_message(
+                        "❌ yt-dlp kurulu değil! Müzik komutları çalışmaz.", ephemeral=True)
+                    return
+
+            with self._yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
                 info = ydl.extract_info(f"ytsearch:{query}", download=False)
                 if 'entries' in info:
                     info = info['entries'][0]

@@ -307,24 +307,33 @@ async def shutdown_bot(ctx):
 if __name__ == '__main__':
     token = get_env('DISCORD_TOKEN')
     if not token:
-        logger.error('DISCORD_TOKEN not found in environment variables!')
+        logger.error('❌ DISCORD_TOKEN bulunamadi! .env veya ortam degiskenlerini kontrol et.')
         exit(1)
-    
+
+    import traceback
+
     try:
         bot.run(token, reconnect=True)
     except discord.LoginFailure:
         logger.error('❌ Geçersiz token! DISCORD_TOKEN değerini kontrol et.')
-    except discord.errors.PrivilegedIntentsRequired as e:
+        exit(1)
+    except discord.errors.PrivilegedIntentsRequired:
         logger.error('=' * 60)
         logger.error('❌ PRIVILEGED INTENTS KAPALI - Bot çalışamaz!')
         logger.error('=' * 60)
-        logger.error('Çözüm:')
-        logger.error('1. https://discord.com/developers/applications adresine git')
+        logger.error('1. https://discord.com/developers/applications')
         logger.error('2. Uygulamanı seç → Bot sekmesi')
-        logger.error('3. "Privileged Gateway Intents" bölümünde:')
-        logger.error('   ✅ MESSAGE CONTENT INTENT → AÇ')
-        logger.error('   ✅ SERVER MEMBERS INTENT → AÇ')
-        logger.error('4. "Save Changes" butonuna tıkla')
+        logger.error('3. MESSAGE CONTENT INTENT ve SERVER MEMBERS INTENT → AÇ')
+        logger.error('4. Save Changes')
         logger.error('=' * 60)
+        exit(1)
+    except SystemExit:
+        raise
     except Exception as e:
-        logger.error(f'❌ Bot çöktü: {type(e).__name__}: {e}')
+        logger.error('=' * 60)
+        logger.error(f'❌ BOT ÇÖKTÜ: {type(e).__name__}')
+        logger.error('=' * 60)
+        for line in traceback.format_exc().splitlines():
+            logger.error(line)
+        logger.error('=' * 60)
+        exit(1)
