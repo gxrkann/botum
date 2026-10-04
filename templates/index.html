@@ -777,6 +777,7 @@
                     <button class="refresh-btn" onclick="voiceAction('join')">🔗 Bağlan / Taşı</button>
                     <button class="refresh-btn" onclick="voiceAction('leave')" style="background: linear-gradient(90deg, #e74c3c, #c0392b);">🚪 Ayrıl</button>
                     <button class="refresh-btn" onclick="loadVoiceChannels()" style="background: linear-gradient(90deg, #636e72, #4a4a4a);">🔄 Yenile</button>
+                    <button class="refresh-btn" onclick="loadVoiceGuilds()" style="background: linear-gradient(90deg, #636e72, #4a4a4a);">📋 Sunucular</button>
                 </div>
 
                 <div id="voice-status" style="margin-top: 10px; color: #4caf50;"></div>
@@ -1196,46 +1197,82 @@
 
         async function loadVoiceGuilds() {
             const sel = document.getElementById('voice-guild');
+            const chSel = document.getElementById('voice-channel');
+            const cur = document.getElementById('voice-current');
+
+            sel.innerHTML = '<option value="">Yükleniyor...</option>';
+            chSel.innerHTML = '<option value="">Önce sunucu seç</option>';
+            cur.textContent = 'Durum: yükleniyor...';
+
+            let d;
             try {
-                const d = await fetch('/api/voice_control').then(r => r.json());
-                if (d.guilds && d.guilds.length) {
-                    sel.innerHTML = d.guilds.map(g =>
-                        `<option value="${g.id}">${g.name}</option>`).join('');
-                    await loadVoiceChannels();
-                } else {
-                    sel.innerHTML = '<option value="">Sunucu yok</option>';
-                }
+                const res = await fetch('/api/voice_control');
+                d = await res.json();
             } catch (e) {
-                sel.innerHTML = '<option value="">Yüklenemedi</option>';
+                sel.innerHTML = '<option value="">Bağlantı hatası</option>';
+                cur.textContent = 'Durum: ❌ Dashboard API erişilemedi';
+                return;
             }
+
+            if (d.error) {
+                sel.innerHTML = `<option value="">${d.error}</option>`;
+                cur.textContent = 'Durum: ⚠️ ' + d.error;
+                return;
+            }
+
+            if (!d.guilds || !d.guilds.length) {
+                sel.innerHTML = '<option value="">Bot sunucuda değil</option>';
+                cur.textContent = 'Durum: ⚪ Bot hiçbir sunucuda değil';
+                return;
+            }
+
+            sel.innerHTML = d.guilds.map(g =>
+                `<option value="${g.id}">${g.name}</option>`).join('');
+
+            await loadVoiceChannels();
         }
 
         async function loadVoiceChannels() {
-            const gid = document.getElementById('voice-guild').value;
+            const sel = document.getElementById('voice-guild');
             const chSel = document.getElementById('voice-channel');
             const cur = document.getElementById('voice-current');
-            if (!gid) return;
+
+            const gid = sel ? sel.value : '';
+            if (!gid) {
+                chSel.innerHTML = '<option value="">Önce sunucu seç</option>';
+                cur.textContent = 'Durum: sunucu seçilmedi';
+                return;
+            }
+
+            chSel.innerHTML = '<option value="">Yükleniyor...</option>';
 
             try {
-                const d = await fetch('/api/voice_control?guild_id=' + gid).then(r => r.json());
+                const res = await fetch('/api/voice_control?guild_id=' + encodeURIComponent(gid));
+                const d = await res.json();
+
                 if (d.error) {
-                    chSel.innerHTML = `<option value="">${d.error}</option>`;
-                    cur.textContent = 'Durum: ' + d.error;
+                    chSel.innerHTML = `<option value="">Hata</option>`;
+                    cur.textContent = 'Durum: ❌ ' + d.error;
                     return;
                 }
 
-                chSel.innerHTML = '<option value="">Kanal seçin</option>' +
-                    d.channels.map(c =>
-                        `<option value="${c.id}">${c.name} (${c.members} kişi)</option>`).join('');
+                if (!d.channels || !d.channels.length) {
+                    chSel.innerHTML = '<option value="">Ses kanalı yok</option>';
+                } else {
+                    chSel.innerHTML = '<option value="">Kanal seçin</option>' +
+                        d.channels.map(c =>
+                            `<option value="${c.id}">${c.name} (${c.members})</option>`).join('');
+                }
 
                 if (d.current && d.current.channel_name) {
-                    cur.textContent = `Durum: 🟢 ${d.current.channel_name} kanalında`;
+                    cur.textContent = 'Durum: 🟢 ' + d.current.channel_name;
                     chSel.value = d.current.channel_id;
                 } else {
                     cur.textContent = 'Durum: ⚪ Ses kanalında değil';
                 }
             } catch (e) {
-                chSel.innerHTML = `<option value="">Hata: ${e.message}</option>`;
+                chSel.innerHTML = `<option value="">Bağlantı hatası</option>`;
+                cur.textContent = 'Durum: ❌ ' + e.message;
             }
         }
 
