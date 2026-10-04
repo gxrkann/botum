@@ -108,6 +108,51 @@ class Database:
             )
         ''')
 
+        # Guard - Wick tarzi tehdit/aksiyon takibi
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS guard_actions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER NOT NULL,
+                action_type TEXT,
+                severity INTEGER DEFAULT 0,
+                description TEXT,
+                executor_id INTEGER,
+                executor_name TEXT,
+                target_name TEXT,
+                blocked INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS guard_threat (
+                guild_id INTEGER PRIMARY KEY,
+                score INTEGER DEFAULT 0,
+                raid_mode INTEGER DEFAULT 0,
+                last_raid_join TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS guard_user_threat (
+                guild_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                score INTEGER DEFAULT 0,
+                action_count INTEGER DEFAULT 0,
+                last_seen TIMESTAMP,
+                PRIMARY KEY (guild_id, user_id)
+            )
+        ''')
+
+        # Indexler - hizli sorgu icin
+        await self.connection.execute(
+            'CREATE INDEX IF NOT EXISTS idx_guard_actions_guild ON guard_actions(guild_id, id DESC)'
+        )
+        await self.connection.execute(
+            'CREATE INDEX IF NOT EXISTS idx_guard_threat_users ON guard_user_threat(guild_id, score DESC)'
+        )
+
         # Music queue table
         await self.connection.execute('''
             CREATE TABLE IF NOT EXISTS music_queue (

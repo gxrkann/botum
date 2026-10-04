@@ -6,6 +6,9 @@ import json
 import os
 import asyncio
 
+from cogs import threat_engine as TE
+
+
 class Guard(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -13,6 +16,129 @@ class Guard(commands.Cog):
         if not os.path.exists(self.backup_dir):
             os.makedirs(self.backup_dir)
         self.action_log = {}
+
+    # ======================================================
+    #  TEHDIT MOTORU  (Wick tarzi)
+    # ======================================================
+    async def get_threat(self, guild_id: int) -> dict:
+        """Anlik tehdit seviyesi (decay uygulanmis hali)"""
+        async with self.bot.db.connection.execute(
+            'SELECT score, raid_mode, updated_at FROM guard_threat WHERE guild_id = ?',
+            (guild_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+
+        if not row:
+            return {'score': 0, 'raid_mode': 0, 'label': TE.threat_level(0)[0],
+                    'color': TE.threat_level(0)[1]}
+
+        score, raid_mode, updated_at = row
+
+        # Zaman gecmisine gore azalt
+        try:
+            last = datetime.strptime(str(updated_at), '%Y-%m-%d %H:%M:%S')
+            minutes = (datetime.now() - last).total_seconds() / 60
+        except (ValueError, TypeError):
+            minutes = 0
+
+        real = TE.decay_score(score, minutes)
+        if real != score:
+            await self._save_threat(guild_id, real, raid_mode)
+
+        label, color = TE.threat_level(real)
+        return {'score': real, 'raid_mode': raid_mode, 'label': label, 'color': color}
+
+    async def _save_threat(self, guild_id: int, score: int, raid_mode: int = 0):
+        await self.bot.db.connection.execute(
+            '''INSERT OR REPLACE INTO guard_threat
+               (guild_id, score, raid_mode, updated_at)
+               VALUES (?, ?, ?, CURRENT_TIMESTAMP)''',
+            (guild_id, score, raid_mode)
+        )
+        await self.bot.db.connection.commit()
+
+    async def record_threat(self, guild_id: int, action_type: str,
+                            executor=None, target: str = None,
+                            description: str = None, blocked: bool = False):
+        """
+        Su pheli bir olayi kaydet + tehdit puanini artir.
+
+        executor : discord.Member veya None
+        action_type: TE.THREAT_WEIGHTS icindeki anahtarlardan biri
+        """
+        try:
+            current = await self.get_threat(guild_id)
+            new_score = TE.add_score(current['score'], action_type)
+            await self._save_threat(guild_id, new_score, current['raid_mode'])
+
+            executor_id = getattr(executor, 'id', None)
+            executor_name = getattr(executor, 'name', None) or 'Bilinmiyor'
+            _, _, default_desc = TE.action_info(action_type)
+
+            await self.bot.db.connection.execute(
+                '''INSERT INTO guard_actions
+                   (guild_id, action_type, severity, description, executor_id,
+                    executor_name, target_name, blocked, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)''',
+                (guild_id, action_type,
+                 TE.THREAT_WEIGHTS.get(action_type, 1),
+                 description or default_desc,
+                 executor_id, executor_name, target, 1 if blocked else 0)
+            )
+
+            # Kullanici bazli tehdit
+            if executor_id:
+                await self.bot.db.connection.execute(
+                    '''INSERT INTO guard_user_threat
+                       (guild_id, user_id, score, action_count, last_seen)
+                       VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)
+                       ON CONFLICT(guild_id, user_id) DO UPDATE SET
+                         score = score + excluded.score,
+                         action_count = action_count + 1,
+                         last_seen = CURRENT_TIMESTAMP''',
+                    (guild_id, executor_id,
+                     TE.THREAT_WEIGHTS.get(action_type, 1))
+                )
+
+            await self.bot.db.connection.commit()
+
+            # Eski kayitlari temizle (son 500)
+            await self.bot.db.connection.execute(
+                '''DELETE FROM guard_actions WHERE guild_id = ? AND id NOT IN
+                   (SELECT id FROM guard_actions WHERE guild_id = ?
+                    ORDER BY id DESC LIMIT 500)''',
+                (guild_id, guild_id)
+            )
+            await self.bot.db.connection.commit()
+
+            return new_score
+
+        except Exception as e:
+            self.bot.logger.error(f"Tehdit kaydi hatasi: {e}")
+            return None
+
+    async def get_actions(self, guild_id: int, limit: int = 25):
+        async with self.bot.db.connection.execute(
+            '''SELECT action_type, severity, description, executor_id,
+                      executor_name, target_name, blocked, created_at
+               FROM guard_actions WHERE guild_id = ?
+               ORDER BY id DESC LIMIT ?''',
+            (guild_id, limit)
+        ) as cursor:
+            return await cursor.fetchall()
+
+    async def get_threat_users(self, guild_id: int, limit: int = 10):
+        async with self.bot.db.connection.execute(
+            '''SELECT user_id, score, action_count, last_seen
+               FROM guard_user_threat WHERE guild_id = ?
+               ORDER BY score DESC LIMIT ?''',
+            (guild_id, limit)
+        ) as cursor:
+            return await cursor.fetchall()
+
+    async def set_raid_mode(self, guild_id: int, active: bool):
+        current = await self.get_threat(guild_id)
+        await self._save_threat(guild_id, current['score'], 1 if active else 0)
 
     async def get_log_channel(self, guild_id: int):
         """Guard loglari icin ozel kanal, yoksa genel log kanalina duser"""
@@ -283,27 +409,91 @@ class Guard(commands.Cog):
         else:
             await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='guard_durum', description='Guard durumunu gör')
-    async def guard_durum(self, interaction: discord.Interaction):
+    @app_commands.command(name='guard_durum', description='Guard durumunu gör (tehdit seviyesi + son olaylar)')
+    @app_commands.describe(detay='Son kaç olay gösterilsin (1-25)')
+    async def guard_durum(self, interaction: discord.Interaction, detay: int = 10):
+        guild_id = interaction.guild.id
+
         async with self.bot.db.connection.execute(
             'SELECT settings FROM guard_settings WHERE guild_id = ?',
-            (interaction.guild.id,)
+            (guild_id,)
         ) as cursor:
             row = await cursor.fetchone()
 
-        if not row:
-            await interaction.response.send_message("❌ Guard sistemi ayarlanmamış!", ephemeral=True)
-            return
+        settings = json.loads(row[0]) if row else {'enabled': False, 'protections': []}
+        limit = max(1, min(25, detay or 10))
 
-        settings = json.loads(row[0])
+        await interaction.response.defer(ephemeral=True)
+
+        threat = await self.get_threat(guild_id)
+        actions = await self.get_actions(guild_id, limit)
+        users = await self.get_threat_users(guild_id, 5)
+
+        # Tehdit gostergesi (Wick tarzi bar)
+        score = threat['score']
+        bar_len = 10
+        filled = int(round(score / 100 * bar_len))
+        bar = '█' * filled + '░' * (bar_len - filled)
+        label = threat['label']
+
+        if score >= 80:
+            emoji = '🔴'
+        elif score >= 60:
+            emoji = '🟠'
+        elif score >= 40:
+            emoji = '🟡'
+        elif score >= 20:
+            emoji = '🟢'
+        else:
+            emoji = '⚪'
+
         embed = discord.Embed(
             title="🛡️ Guard Durumu",
-            color=discord.Color.green() if settings['enabled'] else discord.Color.red(),
+            color=discord.Color(threat['color']),
             timestamp=datetime.now()
         )
-        embed.add_field(name="Durum", value="Aktif" if settings['enabled'] else "Pasif", inline=False)
-        embed.add_field(name="Korumalar", value=", ".join(settings['protections']), inline=False)
-        await interaction.response.send_message(embed=embed)
+
+        embed.add_field(
+            name=f"{emoji} Tehdit Seviyesi: {label}",
+            value=(f"`{bar}`  **%{score}**\n\n"
+                   f"Aktif: {'✅ Evet' if settings.get('enabled') else '❌ Hayır'}\n"
+                   f"Raid modu: {'🔴 AÇIK' if threat['raid_mode'] else '🟢 Kapalı'}\n"
+                   f"Koruma: {len(settings.get('protections', []))} kural"),
+            inline=False
+        )
+
+        # En tehlikeli kullanicilar
+        if users:
+            lines = []
+            for uid, uscore, count, last in users:
+                u = interaction.guild.get_member(uid)
+                name = u.mention if u else f"`{uid}`"
+                lines.append(f"{name} — **{uscore}** puan • {count} olay")
+            embed.add_field(
+                name="👤 Şüpheli Kullanıcılar",
+                value="\n".join(lines)[:1024] or "Temiz",
+                inline=False
+            )
+
+        # Son olaylar
+        if actions:
+            lines = []
+            for row in actions:
+                emoji_map = {'✅': '✅', '❌': '❌', '⛔': '⛔', '⚠️': '⚠️'}
+                blocked = "⛔ ENGELLENDİ" if row[6] else "✅"
+                tarih = str(row[7])[:16] if row[7] else "?"
+                lines.append(f"{blocked} **{row[0]}** — {row[2]}\n"
+                             f"　├ 👤 {row[4]} • 🕐 {tarih}")
+            embed.add_field(
+                name=f"📋 Son Olaylar ({len(actions)})",
+                value="\n".join(lines)[:1024] or "Kayıt yok",
+                inline=False
+            )
+        else:
+            embed.add_field(name="📋 Son Olaylar", value="Henüz olay kaydı yok ✅", inline=False)
+
+        embed.set_footer(text="Tehdit puanı 30 dakikada yarıya düşer • /guard_ayarla ile kuralları yönet")
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     # ==================== BACKUP ====================
     @app_commands.command(name='backup_al', description='Sunucuyu yedekle')
@@ -462,49 +652,161 @@ class Guard(commands.Cog):
     # ==================== EVENT GUARD ====================
     @commands.Cog.listener()
     async def on_guild_role_create(self, role):
-        if not await self.check_guard(role.guild.id, 'rol'):
-            return
-
         dangerous_permissions = [
             'administrator', 'manage_guild', 'manage_roles',
             'manage_channels', 'ban_members', 'kick_members'
         ]
 
+        # Yeni rol kendinden once gelenlerden mi? Audit log ile kimin
+        # olusturdugunu bulmaya calisiriz.
+        creator = await self._find_actor(role.guild, 'role_create', role)
+
+        tehlikeli = None
         for perm in dangerous_permissions:
             if getattr(role.permissions, perm, False):
-                try:
-                    await role.delete(reason="Guard: Tehlikeli izinli rol")
-                    await self.log_action(role.guild.id, "Rol Silindi", role.name, "Guard", "Tehlikeli izinler")
-                except discord.Forbidden:
-                    pass
+                tehlikeli = perm
                 break
 
-    @commands.Cog.listener()
-    async def on_guild_channel_create(self, channel):
-        if not await self.check_guard(channel.guild.id, 'kanal'):
-            return
+        if tehlikeli == 'administrator':
+            await self.record_threat(
+                role.guild.id, 'yetkili_rol_olusturuldu', creator, role.name,
+                f"`{creator or 'Bilinmiyor'}` admin yetkili rol oluşturdu: **{role.name}**",
+                blocked=bool(tehlikeli))
 
-        if channel.name in ['admin', 'moderator', 'staff', 'owner']:
+        elif tehlikeli:
+            await self.record_threat(
+                role.guild.id, 'rol_olusturuldu', creator, role.name,
+                f"`{creator or 'Bilinmiyor'}` yetkili rol oluşturdu: **{role.name}** ({tehlikeli})")
+
+        else:
+            await self.record_threat(
+                role.guild.id, 'rol_olusturuldu', creator, role.name,
+                f"`{creator or 'Bilinmiyor'}` rol oluşturdu: **{role.name}**")
+
+        # Tehlikeli izinli rol olusturulduysa sil
+        if tehlikeli and await self.check_guard(role.guild.id, 'rol'):
             try:
-                await channel.delete(reason="Guard: Şüpheli kanal")
-                await self.log_action(channel.guild.id, "Kanal Silindi", channel.name, "Guard", "Şüpheli isim")
+                await role.delete(reason="Guard: Tehlikeli izinli rol")
+                await self.log_action(role.guild.id, "Rol Silindi", role.name, "Guard", f"Tehlikeli izin: {tehlikeli}")
             except discord.Forbidden:
                 pass
 
+    async def _find_actor(self, guild, action_name: str, target):
+        """Audit log'dan son olayi yapan kisiyi bulur"""
+        action_map = {
+            'role_create': discord.AuditLogAction.role_create,
+            'role_delete': discord.AuditLogAction.role_delete,
+            'channel_create': discord.AuditLogAction.channel_create,
+            'channel_delete': discord.AuditLogAction.channel_delete,
+            'channel_update': discord.AuditLogAction.channel_update,
+            'webhook_create': discord.AuditLogAction.webhook_create,
+            'member_ban': discord.AuditLogAction.member_ban,
+            'member_kick': discord.AuditLogAction.member_kick,
+            'target_update': discord.AuditLogAction.target_update,
+        }
+        act = action_map.get(action_name)
+        if not act:
+            return None
+
+        try:
+            now = datetime.now()
+            async for entry in guild.audit_logs(limit=5):
+                if entry.action != act:
+                    continue
+                if entry.created_at and (now - entry.created_at).total_seconds() > 15:
+                    break
+                # Botumuzun kendi islemi olmasin
+                if self.bot.user and entry.user and entry.user.id == self.bot.user.id:
+                    return None
+                return entry.user
+        except discord.Forbidden:
+            return None
+        except Exception:
+            return None
+        return None
+
     @commands.Cog.listener()
-    async def on_member_join(self, member):
-        if not await self.check_guard(member.guild.id, 'raid'):
-            return
+    async def on_guild_role_delete(self, role):
+        creator = await self._find_actor(role.guild, 'role_delete', role)
+        await self.record_threat(
+            role.guild.id, 'rol_silindi', creator, role.name,
+            f"`{creator or 'Bilinmiyor'}` rol sildi: **{role.name}**")
 
-        recent_joins = [m for m in member.guild.members if (datetime.now() - m.joined_at).total_seconds() < 10]
-        if len(recent_joins) > 5:
-            await self.log_action(member.guild.id, "Raid Algılandı", f"{len(recent_joins)} üye", "Guard", "Ani üye artışı")
+    @commands.Cog.listener()
+    async def on_guild_channel_create(self, channel):
+        creator = await self._find_actor(channel.guild, 'channel_create', channel)
 
-            for m in recent_joins:
+        await self.record_threat(
+            channel.guild.id, 'kanal_olusturuldu', creator, channel.name,
+            f"`{creator or 'Bilinmiyor'}` kanal oluşturdu: #{channel.name}")
+
+        if channel.name in ['admin', 'moderator', 'staff', 'owner']:
+            if await self.check_guard(channel.guild.id, 'kanal'):
                 try:
-                    await m.timeout(timedelta(minutes=10), reason="Guard: Raid koruması")
+                    await channel.delete(reason="Guard: Şüpheli kanal")
+                    await self.log_action(channel.guild.id, "Kanal Silindi", channel.name, "Guard", "Şüpheli isim")
                 except discord.Forbidden:
                     pass
+
+    @commands.Cog.listener()
+    async def on_guild_channel_update(self, before, after):
+        if before.name == after.name and before.overwrites == after.overwrites:
+            return
+
+        creator = await self._find_actor(after.guild, 'channel_update', after)
+
+        # Kanal izinleri acildi mi?
+        if before.overwrites != after.overwrites:
+            for target, ow in (after.overwrites or {}).items():
+                ow = getattr(ow, 'pair', lambda: None)()
+                if ow and ow[1] and ow[1].administrator:
+                    await self.record_threat(
+                        after.guild.id, 'admin_verildi', creator, after.name,
+                        f"`{creator or 'Bilinmiyor'}` **#{after.name}** kanalına admin izni verdi",
+                        blocked=True)
+                    return
+
+        await self.record_threat(
+            after.guild.id, 'rol_degisti', creator, after.name,
+            f"`{creator or 'Bilinmiyor'}` **#{after.name}** kanalını güncelledi")
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member):
+        if member.bot:
+            return
+
+        # Hızlı katılım tespiti - raid modu
+        recent = [
+            m for m in member.guild.members
+            if m.joined_at and (datetime.now() - m.joined_at).total_seconds() < 15
+        ]
+
+        if len(recent) >= 5:
+            await self.record_threat(
+                member.guild.id, 'hizli_giris', None,
+                f"{len(recent)} üye",
+                f"**{len(recent)} üye** 15 saniye içinde katıldı - Raid şüphesi!",
+                blocked=True)
+
+            if await self.check_guard(member.guild.id, 'raid'):
+                for m in recent:
+                    if m.bot or m.top_role >= member.guild.me.top_role:
+                        continue
+                    try:
+                        await m.timeout(timedelta(minutes=10), reason="Guard: Raid koruması")
+                    except discord.Forbidden:
+                        pass
+        else:
+            await self.record_threat(
+                member.guild.id, 'rol_degisti', None, member.name,
+                f"Yeni üye katıldı: **{member.display_name}**")
+
+    @commands.Cog.listener()
+    async def on_member_ban(self, guild, user):
+        actor = await self._find_actor(guild, 'member_ban', user)
+        await self.record_threat(
+            guild.id, 'uye_yasaklandi', actor, str(user),
+            f"`{actor or 'Bilinmiyor'}` **{user}** kullanıcısını yasakladı")
 
     @commands.Cog.listener()
     async def on_message(self, message):

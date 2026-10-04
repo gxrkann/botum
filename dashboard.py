@@ -326,6 +326,85 @@ def api_reload(cog):
         return jsonify({'success': True})
     return jsonify({'error': result}), 500
 
+@app.route('/api/guard_threat', methods=['GET', 'POST'])
+def api_guard_threat():
+    """Guard tehdit seviyesi, olaylar, supheli kullanicilar"""
+    bot = app.config.get('BOT')
+    if not bot:
+        return jsonify({'error': 'Bot not available'}), 500
+
+    guard = bot.get_cog('Guard')
+    if not guard:
+        return jsonify({'error': 'Guard cog yuklenmedi'}), 500
+
+    guild_id = (request.json or {}).get('guild_id') if request.method == 'POST' \
+        else request.args.get('guild_id')
+    if not guild_id:
+        return jsonify({'error': 'Sunucu secilmedi'}), 400
+
+    guild_id = int(guild_id)
+
+    try:
+        async def collect():
+            threat = await guard.get_threat(guild_id)
+            actions = await guard.get_actions(guild_id, 30)
+            users = await guard.get_threat_users(guild_id, 8)
+
+            async with bot.db.connection.execute(
+                'SELECT settings FROM guard_settings WHERE guild_id = ?', (guild_id,)
+            ) as cur:
+                row = await cur.fetchone()
+            cfg = json.loads(row[0]) if row else {'enabled': False, 'protections': []}
+
+            # Son 24 saat istatistigi
+            async with bot.db.connection.execute(
+                '''SELECT COUNT(*), COALESCE(SUM(blocked), 0)
+                   FROM guard_actions
+                   WHERE guild_id = ? AND created_at >= datetime('now','-1 day')''',
+                (guild_id,)
+            ) as cur:
+                day = await cur.fetchone()
+
+            return {
+                'threat': {
+                    'score': threat['score'],
+                    'label': threat['label'],
+                    'raid_mode': bool(threat['raid_mode']),
+                },
+                'enabled': cfg.get('enabled', False),
+                'protections': cfg.get('protections', []),
+                'total_actions': len(actions),
+                'last_24h': {'total': day[0] or 0, 'blocked': day[1] or 0},
+                'actions': [
+                    {
+                        'type': r[0],
+                        'severity': r[1] or 0,
+                        'description': r[2],
+                        'executor_id': str(r[3]) if r[3] else None,
+                        'executor': r[4],
+                        'target': r[5],
+                        'blocked': bool(r[6]),
+                        'time': str(r[7]) if r[7] else '',
+                    }
+                    for r in actions
+                ],
+                'suspects': [
+                    {
+                        'user_id': str(u[0]),
+                        'score': u[1] or 0,
+                        'count': u[2] or 0,
+                        'last_seen': str(u[3]) if u[3] else '',
+                        'mention': f"<@{u[0]}>",
+                    }
+                    for u in users
+                ],
+            }
+
+        return jsonify(run_async(collect()))
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/hizli_ayar', methods=['GET', 'POST'])
 def api_hizli_ayar():
     """Giris/cikis DM mesajlari - hizli ayar"""

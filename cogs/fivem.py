@@ -31,7 +31,8 @@ class FiveM(commands.Cog):
         member='Oyuncu',
         weapon='Silah markası',
         amount='Miktar',
-        reason='Nasıl katlandı / Neden'
+        reason='Nasıl katlandı / Neden',
+        sayfa='Depo sayfası (her sayfada 12 silah)'
     )
     @app_commands.choices(kategori=[
         app_commands.Choice(name='Katlanan - Silah ver', value='katlanan'),
@@ -41,9 +42,10 @@ class FiveM(commands.Cog):
         app_commands.Choice(name='Nasıl Katlandı - Katlanma yolu', value='nasil'),
         app_commands.Choice(name='Liste - Oyuncunun silahları', value='liste'),
         app_commands.Choice(name='İstatistik - Ekip istatistikleri', value='istatistik'),
-        app_commands.Choice(name='Kayıp Listesi - Kaybedilen silahlar', value='kayip_liste')
+        app_commands.Choice(name='Kayıp Listesi - Kaybedilen silahlar', value='kayip_liste'),
+        app_commands.Choice(name='📦 Depo - Oyuncunun tüm silahları', value='depo')
     ])
-    async def silah(self, interaction: discord.Interaction, kategori: str, member: discord.Member | None = None, weapon: str = None, amount: int = None, reason: str = None):
+    async def silah(self, interaction: discord.Interaction, kategori: str, member: discord.Member | None = None, weapon: str = None, amount: int = None, reason: str = None, sayfa: int = 1):
         if kategori == "katlanan":
             await self.silah_katlanan(interaction, member, weapon, amount, reason)
         elif kategori == "kaybedilen":
@@ -60,6 +62,8 @@ class FiveM(commands.Cog):
             await self.silah_istatistik(interaction)
         elif kategori == "kayip_liste":
             await self.silah_kayip_liste(interaction)
+        elif kategori == "depo":
+            await self.silah_depo(interaction, member, weapon, sayfa)
 
     async def silah_katlanan(self, interaction: discord.Interaction, member: discord.Member, weapon: str, amount: int, reason: str):
         if not member or not weapon or not amount:
@@ -340,6 +344,176 @@ class FiveM(commands.Cog):
             )
 
         await interaction.response.send_message(embed=embed)
+
+    async def silah_depo(self, interaction: discord.Interaction, member, weapon=None, sayfa: int = 1):
+            """
+            Oyuncunun TUM silahlarini gosterir (depo).
+
+            - weapon verilmezse: tum silahlar gruplanmis ozet + toplam deger
+            - weapon verilirse : sadece o silahin gecmisi (kim, ne zaman, deger)
+            - sayfa ile sayfalama (12 kayit/sayfa)
+            """
+            if not member:
+                await interaction.response.send_message(
+                    "❌ **Oyuncu belirtmelisin!**\nKullanım: `/silah kategori:Depo üye:@kişi`",
+                    ephemeral=True)
+                return
+
+            guild_id = interaction.guild.id
+            await interaction.response.defer(ephemeral=True)
+
+            # ---- Belirli bir silahin gecmisi ----
+            if weapon:
+                async with self.bot.db.connection.execute(
+                    '''SELECT weapon_name, price, moderator_id, created_at
+                       FROM fivem_weapons
+                       WHERE guild_id = ? AND user_id = ? AND LOWER(weapon_name) = LOWER(?)
+                       ORDER BY created_at DESC''',
+                    (guild_id, member.id, weapon)
+                ) as cursor:
+                    rows = await cursor.fetchall()
+
+                if not rows:
+                    await interaction.followup.send(
+                        f"❌ **{member.display_name}** deposunda `{weapon}` bulunamadı!",
+                        ephemeral=True)
+                    return
+
+                per_page = 10
+                toplam_sayfa = (len(rows) + per_page - 1) // per_page
+                sayfa = max(1, min(sayfa, toplam_sayfa))
+                bas = (sayfa - 1) * per_page
+                dilim = rows[bas:bas + per_page]
+
+                embed = discord.Embed(
+                    title=f"🔫 {member.display_name} → {weapon} Geçmişi",
+                    description=f"Toplam **{len(rows)}** kayıt",
+                    color=discord.Color.purple(),
+                    timestamp=datetime.now()
+                )
+                toplam_deger = sum(r[1] for r in rows if r[1])
+                for i, row in enumerate(dilim, start=bas + 1):
+                    mod = interaction.guild.get_member(row[2])
+                    mod_ment = mod.mention if mod else "Bilinmiyor"
+                    tarih = row[3][:10] if row[3] else "?"
+                    embed.add_field(
+                        name=f"#{i} • {row[0]} — {row[1]} 💵",
+                        value=f"Yetkili: {mod_ment}  •  Tarih: {tarih}",
+                        inline=False
+                    )
+
+                embed.set_footer(text=f"Sayfa {sayfa}/{toplam_sayfa} • Toplam Değer: {toplam_deger} 💵")
+                try:
+                    embed.set_thumbnail(url=member.display_avatar.url)
+                except Exception:
+                    pass
+
+                await interaction.followup.send(embed=embed, ephemeral=True)
+                return
+
+            # ---- Tum silahlar (gruplanmis depo) ----
+            async with self.bot.db.connection.execute(
+                '''SELECT weapon_name, COUNT(*) as adet, COALESCE(SUM(price), 0) toplam,
+                          MIN(created_at) ilk, MAX(created_at) son
+                   FROM fivem_weapons
+                   WHERE guild_id = ? AND user_id = ?
+                   GROUP BY LOWER(weapon_name)
+                   ORDER BY adet DESC, toplam DESC''',
+                (guild_id, member.id)
+            ) as cursor:
+                gruplar = await cursor.fetchall()
+
+            if not gruplar:
+                await interaction.followup.send(
+                    f"📦 **{member.display_name}** deposu **boş**!\n"
+                    f"Henüz silah katlanmamış.", ephemeral=True)
+                return
+
+            toplam_adet = sum(g[1] for g in gruplar)
+            toplam_deger = sum(g[2] for g in gruplar)
+
+            # Sayfalama
+            per_page = 12
+            toplam_sayfa = (len(gruplar) + per_page - 1) // per_page
+            sayfa = max(1, min(sayfa, toplam_sayfa))
+            bas = (sayfa - 1) * per_page
+            dilim = gruplar[bas:bas + per_page]
+
+            embed = discord.Embed(
+                title=f"📦 {member.display_name} — Depo",
+                color=discord.Color.green(),
+                timestamp=datetime.now()
+            )
+
+            # Özet
+            embed.add_field(
+                name="📊 Özet",
+                value=(f"🔫 **Toplam silah:** {toplam_adet}\n"
+                       f"💰 **Toplam değer:** {toplam_deger:,} 💵\n"
+                       f"🏷️ **Farklı silah:** {len(gruplar)}"),
+                inline=False
+            )
+
+            # Silah listesi
+            liste = ""
+            for g in dilim:
+                ad, adet, deger = g[0], g[1], g[2]
+                ilk = g[3][:10] if g[3] else "?"
+                son = g[4][:10] if g[4] else "?"
+                liste += (f"`{ad}` — **{adet}** adet • **{deger:,}** 💵\n"
+                          f"　 ilk: {ilk} · son: {son}\n")
+
+            embed.add_field(name="🗃️ Silahlar", value=liste, inline=False)
+            embed.set_footer(
+                text=f"Sayfa {sayfa}/{toplam_sayfa} • Detay için: `/silah kategori:Depo üye:{member.display_name} silah:<ad>`"
+            )
+
+            try:
+                embed.set_thumbnail(url=member.display_avatar.url)
+            except Exception:
+                pass
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+    async def silah_istatistik(self, interaction: discord.Interaction):
+        async with self.bot.db.connection.execute(
+            'SELECT COUNT(*), COALESCE(SUM(price), 0) FROM fivem_weapons WHERE guild_id = ?',
+            (interaction.guild.id,)
+        ) as cursor:
+            won_row = await cursor.fetchone()
+
+        async with self.bot.db.connection.execute(
+            'SELECT COUNT(*) FROM fivem_weapons_lost WHERE guild_id = ?',
+            (interaction.guild.id,)
+        ) as cursor:
+            lost_row = await cursor.fetchone()
+
+        async with self.bot.db.connection.execute(
+            '''SELECT user_id, COUNT(*) as weapon_count, SUM(price) as total_value
+               FROM fivem_weapons WHERE guild_id = ? GROUP BY user_id ORDER BY total_value DESC LIMIT 10''',
+            (interaction.guild.id,)
+        ) as cursor:
+            user_rows = await cursor.fetchall()
+
+        embed = discord.Embed(
+            title="🔫 Ekip Silah İstatistikleri",
+            color=discord.Color.blue(),
+            timestamp=datetime.now()
+        )
+
+        embed.add_field(name="Toplam Katlanan", value=f"{won_row[0]} silah - {won_row[1]} 💵", inline=False)
+        embed.add_field(name="Toplam Kaybedilen", value=f"{lost_row[0]} silah", inline=False)
+
+        if user_rows:
+            user_text = ""
+            for row in user_rows:
+                user = interaction.guild.get_member(row[0])
+                user_name = user.mention if user else f"Bilinmiyor ({row[0]})"
+                user_text += f"{user_name}: {row[1]} silah - {row[2]} 💵\n"
+            embed.add_field(name="Oyuncu Bazında", value=user_text, inline=False)
+
+        await interaction.response.send_message(embed=embed)
+
 
 async def setup(bot):
     await bot.add_cog(FiveM(bot))

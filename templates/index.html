@@ -468,7 +468,7 @@
             <div class="tab" data-tab="fivem" onclick="showTab('fivem')">🔫 FiveM</div>
             <div class="tab" data-tab="giveaways" onclick="showTab('giveaways')">🎉 Çekiliş</div>
             <div class="tab" data-tab="voice" onclick="showTab('voice')">🎤 Ses</div>
-            <div class="tab" data-tab="guard" onclick="showTab('guard')">🛡️ Guard</div>
+            <div class="tab" data-tab="guard" onclick="showTab('guard'); loadThreatGuilds();">🛡️ Guard</div>
             <div class="tab" data-tab="dm" onclick="showTab('dm'); loadDmGuilds();">📨 DM</div>
             <div class="tab" data-tab="design" onclick="showTab('design')">🎨 Tasarım</div>
             <div class="tab" data-tab="settings" onclick="showTab('settings')">⚙️ Ayarlar</div>
@@ -569,9 +569,44 @@
 
         <div id="tab-guard" class="tab-content">
             <div class="section">
-                <h2>Guard Ayarları</h2>
+                <h2>🛡️ Guard Ayarları</h2>
                 <div id="guard-status">
                     <p style="color: #888;">Yükleniyor...</p>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>⚠️ Tehdit Paneli</h2>
+                <div style="margin-bottom:15px;">
+                    <label style="display:block;margin-bottom:5px;color:#888;">Sunucu</label>
+                    <select id="threat-guild" onchange="loadThreat()"
+                            style="width:100%;padding:10px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;">
+                        <option value="">Yükleniyor...</option>
+                    </select>
+                </div>
+
+                <!-- TEHDIT GOSTERGESI -->
+                <div id="threat-gauge-box" style="text-align:center;padding:25px;margin-bottom:20px;border-radius:var(--radius);background:var(--card-bg);border:1px solid var(--card-border);">
+                    <div style="color:#888;font-size:0.9em;margin-bottom:8px;">TEHDİT SEVİYESİ</div>
+                    <div id="threat-level" style="font-size:1.8em;font-weight:bold;">—</div>
+                    <div id="threat-bar" style="font-family:monospace;font-size:1.5em;letter-spacing:2px;margin:10px 0;">░░░░░░░░░░</div>
+                    <div id="threat-percent" style="font-size:2em;font-weight:bold;">%0</div>
+                    <div id="threat-raid" style="margin-top:10px;font-size:0.9em;color:#888;">—</div>
+                </div>
+
+                <!-- ISTATISTIKLER -->
+                <div id="threat-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;"></div>
+
+                <!-- SUPHELI KULLANICILAR -->
+                <h3 style="margin-bottom:10px;">👤 Şüpheli Kullanıcılar</h3>
+                <div id="threat-suspects" style="margin-bottom:20px;">
+                    <p style="color:#888;">Yükleniyor...</p>
+                </div>
+
+                <!-- OLAYLAR -->
+                <h3 style="margin-bottom:10px;">📋 Son Olaylar</h3>
+                <div id="threat-actions" style="max-height:520px;overflow-y:auto;">
+                    <p style="color:#888;">Yükleniyor...</p>
                 </div>
             </div>
         </div>
@@ -1264,6 +1299,120 @@
             applyTheme(cfg);
             applyTabVisibility();
             restartRefresh();
+        }
+
+        // ==================== GUARD TEHDIT PANELI ====================
+        async function loadThreat() {
+            const sel = document.getElementById('threat-guild');
+            const gid = sel ? sel.value : '';
+            if (!gid) return;
+
+            try {
+                const d = await fetch('/api/guard_threat?guild_id=' + encodeURIComponent(gid))
+                    .then(r => r.json());
+
+                if (d.error) {
+                    document.getElementById('threat-level').textContent = 'Hata';
+                    document.getElementById('threat-actions').innerHTML =
+                        `<p style="color:#f44336;">${d.error}</p>`;
+                    return;
+                }
+
+                const t = d.threat;
+                const score = t.score || 0;
+
+                let color, emoji;
+                if (score >= 80) { color = '#e74c3c'; emoji = '🔴'; }
+                else if (score >= 60) { color = '#e67e22'; emoji = '🟠'; }
+                else if (score >= 40) { color = '#f1c40f'; emoji = '🟡'; }
+                else if (score >= 20) { color = '#2ecc71'; emoji = '🟢'; }
+                else { color = '#95a5a6'; emoji = '⚪'; }
+
+                const filled = Math.round(score / 100 * 10);
+                const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+
+                document.getElementById('threat-level').textContent = `${emoji} ${t.label}`;
+                document.getElementById('threat-level').style.color = color;
+                document.getElementById('threat-bar').textContent = bar;
+                document.getElementById('threat-bar').style.color = color;
+                document.getElementById('threat-percent').textContent = `%${score}`;
+                document.getElementById('threat-percent').style.color = color;
+                document.getElementById('threat-raid').innerHTML = t.raid_mode
+                    ? '<span style="color:#e74c3c;font-weight:bold;">🔴 RAID MODU AÇIK</span>'
+                    : '<span style="color:#2ecc71;">🟢 Raid modu kapalı</span>';
+
+                // istatistik kutulari
+                document.getElementById('threat-stats').innerHTML = [
+                    ['🛡️ Guard', d.enabled ? '✅ Aktif' : '❌ Pasif', d.enabled ? '#2ecc71' : '#e74c3c'],
+                    ['📊 Koruma', (d.protections || []).length + ' kural', '#3498db'],
+                    ['📋 Toplam Olay', d.total_actions, '#9b59b6'],
+                    ['🕐 Son 24 Saat', d.last_24h.total, '#f39c12'],
+                    ['⛔ Engellenen', d.last_24h.blocked, '#e74c3c'],
+                    ['👤 Şüpheli', (d.suspects || []).length, '#e67e22'],
+                ].map(([label, val, c]) => `
+                    <div style="padding:12px;border-radius:var(--radius);
+                                background:var(--card-bg);border:1px solid var(--card-border);
+                                text-align:center;">
+                        <div style="color:#888;font-size:0.8em;margin-bottom:4px;">${label}</div>
+                        <div style="font-size:1.3em;font-weight:bold;color:${c};">${val}</div>
+                    </div>`).join('');
+
+                // supheli kullanicilar
+                const sus = d.suspects || [];
+                document.getElementById('threat-suspects').innerHTML = sus.length
+                    ? sus.map(s => `
+                        <div style="display:flex;justify-content:space-between;align-items:center;
+                                    padding:8px 12px;margin-bottom:5px;border-radius:calc(var(--radius)*0.4);
+                                    background:var(--card-bg);border:1px solid var(--card-border);">
+                            <span>${s.mention} <code>${s.user_id}</code></span>
+                            <span style="color:${s.score >= 30 ? '#e74c3c' : s.score >= 15 ? '#f39c12' : '#95a5a6'};">
+                                ${s.score} puan • ${s.count} olay
+                            </span>
+                        </div>`).join('')
+                    : '<p style="color:#2ecc71;">✅ Şüpheli kullanıcı yok</p>';
+
+                // olaylar
+                const acts = d.actions || [];
+                document.getElementById('threat-actions').innerHTML = acts.length
+                    ? acts.map(a => `
+                        <div style="padding:10px 12px;margin-bottom:6px;border-radius:calc(var(--radius)*0.4);
+                                    background:var(--card-bg);border-left:3px solid ${a.blocked ? '#e74c3c' : '#f39c12'};">
+                            <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+                                <span style="font-weight:bold;color:${a.blocked ? '#e74c3c' : '#f39c12'};">
+                                    ${a.blocked ? '⛔ ENGELLENDİ' : '⚠️ KAYIT'}
+                                </span>
+                                <span style="color:#666;font-size:0.8em;">${a.time}</span>
+                            </div>
+                            <div style="margin-top:4px;">${a.description}</div>
+                            <div style="color:#888;font-size:0.8em;margin-top:3px;">
+                                👤 ${a.executor} • 🎯 ${a.target || '—'} • ⚖️ ${a.severity} puan
+                            </div>
+                        </div>`).join('')
+                    : '<p style="color:#2ecc71;">✅ Henüz olay yok</p>';
+
+            } catch (e) {
+                document.getElementById('threat-actions').innerHTML =
+                    `<p style="color:#f44336;">❌ ${e.message}</p>`;
+            }
+        }
+
+        async function loadThreatGuilds() {
+            const sel = document.getElementById('threat-guild');
+            if (!sel || sel.dataset.loaded === '1') return;
+            sel.dataset.loaded = '1';
+
+            try {
+                const d = await fetch('/api/voice_control').then(r => r.json());
+                if (d.guilds && d.guilds.length) {
+                    sel.innerHTML = d.guilds.map(g =>
+                        `<option value="${g.id}">${g.name}</option>`).join('');
+                    loadThreat();
+                } else {
+                    sel.innerHTML = '<option value="">Bot sunucuda değil</option>';
+                }
+            } catch (e) {
+                sel.innerHTML = '<option value="">Yüklenemedi</option>';
+            }
         }
 
         // ==================== GIRIS/CIKIS DM AYARLARI ====================

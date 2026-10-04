@@ -79,20 +79,6 @@ class Help(commands.Cog):
                 ("/nowplaying", "Şimdi çalan"),
                 ("/disconnect", "Botu ayır"),
             ],
-            "economy": [
-                ("/balance", "Bakiyeni gör"),
-                ("/daily", "Günlük ödül"),
-                ("/deposit", "Banka yatır"),
-                ("/withdraw", "Bankadan çek"),
-                ("/transfer", "Para gönder"),
-                ("/work", "Çalış"),
-                ("/rob", "Soy"),
-                ("/leaderboard", "Sıralama"),
-            ],
-            "levels": [
-                ("/rank", "Seviye kartı"),
-                ("/leaderboard", "Seviye sıralaması"),
-            ],
             "fun": [
                 ("/yazitura", "Yazı tura"),
                 ("/zar", "Zar at"),
