@@ -185,16 +185,73 @@ class Moderation(commands.Cog):
 
     # ==================== CLEAR ====================
     @app_commands.command(name='clear', description='Kanaldan mesaj sil')
-    @app_commands.describe(amount='Silinecek mesaj sayısı (1-100)')
+    @app_commands.describe(
+        amount='Silinecek mesaj sayısı (1-300)',
+        channel='Kanal (boş bırakılırsa bulunduğun kanal)',
+        member='Sadece bu üyenin mesajlarını sil',
+        contains='Sadece içinde bu kelime geçen mesajları sil'
+    )
     @app_commands.checks.has_permissions(manage_messages=True)
-    async def clear(self, interaction: discord.Interaction, amount: int):
-        if amount < 1 or amount > 100:
-            await interaction.response.send_message("❌ 1-100 arasında bir sayı gir!", ephemeral=True)
+    async def clear(self, interaction: discord.Interaction, amount: int,
+                    channel: discord.TextChannel | None = None,
+                    member: discord.Member | None = None,
+                    contains: str | None = None):
+        if amount < 1 or amount > 300:
+            await interaction.response.send_message("❌ 1-300 arasında bir sayı gir!", ephemeral=True)
             return
 
-        await interaction.response.defer()
-        deleted = await interaction.channel.purge(limit=amount)
-        await interaction.followup.send(f"🗑️ {len(deleted)} mesaj silindi!", delete_after=5)
+        target = channel or interaction.channel
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            if member is None and contains is None:
+                # Normal toplu silme
+                deleted = await target.purge(limit=amount)
+                await interaction.followup.send(f"🗑️ **{len(deleted)}** mesaj silindi!", ephemeral=True)
+
+            else:
+                # Filtreli silme - 2 haftadan eski mesajlar API ile silinmez
+                cutoff = discord.utils.utcnow() - discord.timedelta(days=14)
+                deleted_count = 0
+                to_delete = []
+
+                async for msg in target.history(limit=amount, oldest_first=False):
+                    if msg.created_at < cutoff:
+                        break
+                    if member is not None and msg.author.id != member.id:
+                        continue
+                    if contains is not None and contains.lower() not in msg.content.lower():
+                        continue
+                    to_delete.append(msg)
+                    if len(to_delete) >= amount:
+                        break
+
+                if not to_delete:
+                    await interaction.followup.send("❌ Silinecek mesaj bulunamadı! (Not: 14 günden eski mesajlar silinemez)", ephemeral=True)
+                    return
+
+                # Toplu sil (34'erli gruplar - Discord rate limit)
+                for i in range(0, len(to_delete), 34):
+                    batch = to_delete[i:i + 34]
+                    try:
+                        await target.delete_messages(batch)
+                        deleted_count += len(batch)
+                    except discord.HTTPException:
+                        # Yetki yoksa tek tek dene
+                        for msg in batch:
+                            try:
+                                await msg.delete()
+                                deleted_count += 1
+                                await asyncio.sleep(0.4)
+                            except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                                pass
+
+                await interaction.followup.send(f"🗑️ **{deleted_count}** mesaj silindi!", ephemeral=True)
+
+        except discord.Forbidden:
+            await interaction.followup.send("❌ Bu kanalda mesaj silme yetkim yok!", ephemeral=True)
+        except discord.HTTPException as e:
+            await interaction.followup.send(f"❌ Silme hatası: {e}", ephemeral=True)
 
     # ==================== SLOWMODE ====================
     @app_commands.command(name='slowmode', description='Kanalı yavaş moda al')

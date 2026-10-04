@@ -75,7 +75,54 @@ class Giveaway(commands.Cog):
         """Cekilis katilimcilarini buton listesinden al"""
         button_id = giveaway.get('button_id')
         ids = self.giveaway_participants.get(button_id, set())
-        return [i for i in ids if not self.bot.get_user(i).bot] if ids else []
+        result = []
+        for uid in ids:
+            user = self.bot.get_user(uid)
+            if user is not None and not user.bot:
+                result.append(uid)
+        return result
+
+    async def _notify_host(self, giveaway, winners, prize, participant_count, action='bit'):
+        """Cekilisi baslatan kisiye DM gonder"""
+        host = self.bot.get_user(giveaway.get('host_id'))
+        if not host:
+            return
+
+        winner_mentions = ', '.join(w.mention for w in winners)
+
+        if action == 'bit':
+            title = "🎉 Çekiliş Tamamlandı"
+            desc = (f"**{prize}** çekilişiniz sona erdi!\n\n"
+                    f"**Kazanan:** {winner_mentions}\n"
+                    f"**Katılımcı:** {participant_count}")
+            color = discord.Color.green()
+        elif action == 'bitir':
+            title = "⏹️ Çekiliş Erken Bitirildi"
+            desc = (f"**{prize}** çekilişini erken bitirdiniz.\n\n"
+                    f"**Kazanan:** {winner_mentions}\n"
+                    f"**Katılımcı:** {participant_count}")
+            color = discord.Color.orange()
+        else:
+            title = "🔄 Çekiliş Yeniden Çekildi"
+            desc = (f"**{prize}** çekilişi yeniden çekildi.\n\n"
+                    f"**Yeni Kazanan:** {winner_mentions}\n"
+                    f"**Katılımcı:** {participant_count}")
+            color = discord.Color.blue()
+
+        embed = discord.Embed(
+            title=title,
+            description=desc,
+            color=color,
+            timestamp=datetime.now()
+        )
+
+        try:
+            await host.send(embed=embed)
+            print(f"[cekilis] Host DM gonderildi: {host.id}", flush=True)
+        except discord.Forbidden:
+            print(f"[cekilis] Host DM kapali: {host.id}", flush=True)
+        except Exception as e:
+            print(f"[cekilis] Host DM hatasi: {e}", flush=True)
 
     @app_commands.command(name='cekilis_bitir', description='Çekilişi erken bitir')
     @app_commands.describe(message_id='Çekiliş mesaj ID\'si')
@@ -118,6 +165,7 @@ class Giveaway(commands.Cog):
                 timestamp=datetime.now()
             )
             await channel.send(embed=embed)
+            await self._notify_host(giveaway, winners_list, giveaway['prize'], len(users), 'bitir')
             await interaction.response.send_message("✅ Çekiliş bitirildi!", ephemeral=True)
         except discord.NotFound:
             await interaction.response.send_message("❌ Mesaj bulunamadı!", ephemeral=True)
