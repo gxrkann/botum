@@ -326,6 +326,59 @@ def api_reload(cog):
         return jsonify({'success': True})
     return jsonify({'error': result}), 500
 
+@app.route('/api/hizli_ayar', methods=['GET', 'POST'])
+def api_hizli_ayar():
+    """Giris/cikis DM mesajlari - hizli ayar"""
+    bot = app.config.get('BOT')
+    if not bot:
+        return jsonify({'error': 'Bot not available'}), 500
+
+    if request.method == 'POST':
+        data = request.json or {}
+        guild_id = data.get('guild_id')
+        if not guild_id:
+            return jsonify({'error': 'Sunucu secilmedi'}), 400
+
+        giris_mesaj = (data.get('dm_giris_mesaj') or '')[:2000]
+        cikis_mesaj = (data.get('dm_cikis_mesaj') or '')[:2000]
+        giris_acik = 1 if data.get('dm_giris_acik') else 0
+        cikis_acik = 1 if data.get('dm_cikis_acik') else 0
+
+        async def save():
+            for key, val in (
+                ('dm_giris_acik', giris_acik),
+                ('dm_giris_mesaj', giris_mesaj),
+                ('dm_cikis_acik', cikis_acik),
+                ('dm_cikis_mesaj', cikis_mesaj),
+            ):
+                await bot.db.update_setting(int(guild_id), key, val)
+
+        try:
+            run_async(save())
+        except Exception as e:
+            return jsonify({'error': f'Kaydedilemedi: {e}'}), 500
+
+        return jsonify({'success': True, 'message': 'Ayar kaydedildi'})
+
+    # GET
+    guild_id = request.args.get('guild_id')
+    if not guild_id:
+        return jsonify({'error': 'Sunucu secilmedi'}), 400
+
+    async def load():
+        s = await bot.db.get_settings(int(guild_id)) or {}
+        return {
+            'dm_giris_acik': bool(s.get('dm_giris_acik')),
+            'dm_giris_mesaj': s.get('dm_giris_mesaj') or '',
+            'dm_cikis_acik': bool(s.get('dm_cikis_acik')),
+            'dm_cikis_mesaj': s.get('dm_cikis_mesaj') or '',
+        }
+
+    try:
+        return jsonify(run_async(load()))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/bot_settings', methods=['GET', 'POST'])
 def api_bot_settings():
     """Get or update bot settings"""

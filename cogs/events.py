@@ -94,9 +94,57 @@ class Events(commands.Cog):
     async def on_guild_remove(self, guild):
         self.bot.logger.info(f'Left guild: {guild.name} ({guild.id})')
 
+    def _dm_template(self, template: str, member, guild):
+        """DM sablonunu doldurur. Bilinmeyen degiskenler calismaz."""
+        repl = {
+            'uye': member.display_name,
+            'ad': member.display_name,
+            'isim': member.display_name,
+            'sunucu': guild.name,
+            'sayi': str(guild.member_count),
+            'id': str(member.id),
+        }
+        out = template or ''
+        for key, val in repl.items():
+            out = out.replace('{' + key + '}', val)
+        return out
+
+    async def _send_dm(self, member, guild, settings, key: str):
+        """
+        Uye giris/cikis DM'i gonderir.
+
+        On ayarli:
+          dm_giris_acik  -> gonderilsin mi
+          dm_giris_mesaj  -> mesaj sablonu
+        Kapatiliyorsa hicbir sey gonderilmez.
+        """
+        if not settings.get(key + '_acik'):
+            return False
+
+        template = settings.get(key + '_mesaj') or ''
+        if not template.strip():
+            return False
+
+        content = self._dm_template(template, member, guild)
+        if not content.strip():
+            return False
+
+        try:
+            await member.send(content)
+            return True
+        except discord.Forbidden:
+            # DM kapali - sessizce gec
+            return False
+        except Exception as e:
+            self.bot.logger.error(f"DM gonderilemedi ({member.id}): {e}")
+            return False
+
     @commands.Cog.listener()
     async def on_member_join(self, member):
         settings = await self.bot.db.get_settings(member.guild.id) or {}
+
+        # DM gonder (asenkron - bekletme)
+        asyncio.create_task(self._send_dm(member, member.guild, settings, 'dm_giris'))
 
         # Uyeye log
         embed = discord.Embed(
@@ -130,6 +178,9 @@ class Events(commands.Cog):
     @commands.Cog.listener()
     async def on_member_remove(self, member):
         settings = await self.bot.db.get_settings(member.guild.id) or {}
+
+        # DM gonder
+        asyncio.create_task(self._send_dm(member, member.guild, settings, 'dm_cikis'))
 
         roles = ', '.join(r.mention for r in member.roles[1:]) or 'Yok'
 

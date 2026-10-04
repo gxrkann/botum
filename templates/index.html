@@ -469,6 +469,7 @@
             <div class="tab" data-tab="giveaways" onclick="showTab('giveaways')">🎉 Çekiliş</div>
             <div class="tab" data-tab="voice" onclick="showTab('voice')">🎤 Ses</div>
             <div class="tab" data-tab="guard" onclick="showTab('guard')">🛡️ Guard</div>
+            <div class="tab" data-tab="dm" onclick="showTab('dm'); loadDmGuilds();">📨 DM</div>
             <div class="tab" data-tab="design" onclick="showTab('design')">🎨 Tasarım</div>
             <div class="tab" data-tab="settings" onclick="showTab('settings')">⚙️ Ayarlar</div>
         </div>
@@ -572,6 +573,76 @@
                 <div id="guard-status">
                     <p style="color: #888;">Yükleniyor...</p>
                 </div>
+            </div>
+        </div>
+
+        <div id="tab-dm" class="tab-content">
+            <div class="section">
+                <h2>📨 Giriş / Çıkış DM Mesajı</h2>
+                <p style="color:#888;margin-bottom:15px;">
+                    Sunucuya giren ve çıkan kişilere özel mesaj gönder.
+                    Mesajı yaz, aç/kapa, kaydet.
+                </p>
+
+                <div style="margin-bottom:15px;">
+                    <label style="display:block;margin-bottom:5px;color:#888;">Sunucu</label>
+                    <select id="dm-guild" onchange="loadHizliAyar()"
+                            style="width:100%;padding:10px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;">
+                        <option value="">Yükleniyor...</option>
+                    </select>
+                </div>
+
+                <!-- GIRIS -->
+                <div class="theme-grid" style="margin-bottom:20px;">
+                    <div>
+                        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;color:#4CAF50;font-weight:bold;">
+                            <input type="checkbox" id="dm-giris-acik" style="width:18px;height:18px;">
+                            📥 Giriş DM'i Açık
+                        </label>
+                        <textarea id="dm-giris-mesaj" rows="4" maxlength="2000"
+                                  placeholder="Hoş geldin {uye}! {sunucu} sunucusuna hoş geldin. Şu an {sayi} kişiyiz."
+                                  style="width:100%;padding:10px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;font-family:var(--font);resize:vertical;"></textarea>
+                        <div class="refresh-btn" onclick="insertToken('dm-giris-mesaj','{uye}')"
+                             style="display:inline-block;margin-top:6px;padding:6px 12px;font-size:0.85em;">{uye} Ekle</div>
+                        <div class="refresh-btn" onclick="insertToken('dm-giris-mesaj','{sunucu}')"
+                             style="display:inline-block;margin-top:6px;margin-left:5px;padding:6px 12px;font-size:0.85em;">{sunucu} Ekle</div>
+                        <div class="refresh-btn" onclick="insertToken('dm-giris-mesaj','{sayi}')"
+                             style="display:inline-block;margin-top:6px;margin-left:5px;padding:6px 12px;font-size:0.85em;">{sayi} Ekle</div>
+                    </div>
+                </div>
+
+                <!-- CIKIS -->
+                <div class="theme-grid" style="margin-bottom:20px;">
+                    <div>
+                        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;color:#f44336;font-weight:bold;">
+                            <input type="checkbox" id="dm-cikis-acik" style="width:18px;height:18px;">
+                            📤 Çıkış DM'i Açık
+                        </label>
+                        <textarea id="dm-cikis-mesaj" rows="4" maxlength="2000"
+                                  placeholder="Görüşmek üzere {uye}! {sunucu} sunucusundan ayrıldın. Tekrar bekleriz!"
+                                  style="width:100%;padding:10px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;font-family:var(--font);resize:vertical;"></textarea>
+                        <div class="refresh-btn" onclick="insertToken('dm-cikis-mesaj','{uye}')"
+                             style="display:inline-block;margin-top:6px;padding:6px 12px;font-size:0.85em;">{uye} Ekle</div>
+                        <div class="refresh-btn" onclick="insertToken('dm-cikis-mesaj','{sunucu}')"
+                             style="display:inline-block;margin-top:6px;margin-left:5px;padding:6px 12px;font-size:0.85em;">{sunucu} Ekle</div>
+                        <div class="refresh-btn" onclick="insertToken('dm-cikis-mesaj','{sayi}')"
+                             style="display:inline-block;margin-top:6px;margin-left:5px;padding:6px 12px;font-size:0.85em;">{sayi} Ekle</div>
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <button class="refresh-btn" onclick="saveHizliAyar()">💾 Kaydet</button>
+                    <button class="refresh-btn" onclick="loadHizliAyar()"
+                            style="background:linear-gradient(90deg,#636e72,#4a4a4a);">🔄 Yenile</button>
+                </div>
+                <div id="dm-status" style="margin-top:10px;font-size:0.9em;"></div>
+
+                <p style="color:#666;font-size:0.85em;margin-top:15px;">
+                    💡 <b>Değişkenler:</b> <code>{uye}</code> (isim) · <code>{sunucu}</code> (sunucu adı) ·
+                    <code>{sayi}</code> (üye sayısı) · <code>{id}</code> (kullanıcı ID)<br>
+                    ⚠️ Kullanıcının DM'si kapalıysa mesaj gönderilemez — sorun yoktur.<br>
+                    ⚠️ <code>@everyone</code> ve <code>@here</code> çalışmaz (DM'de etiketleme yasaktır).
+                </p>
             </div>
         </div>
 
@@ -1193,6 +1264,100 @@
             applyTheme(cfg);
             applyTabVisibility();
             restartRefresh();
+        }
+
+        // ==================== GIRIS/CIKIS DM AYARLARI ====================
+        async function loadDmGuilds() {
+            const sel = document.getElementById('dm-guild');
+            if (!sel || sel.dataset.loaded === '1') return;
+            sel.dataset.loaded = '1';
+
+            try {
+                const d = await fetch('/api/voice_control').then(r => r.json());
+                if (d.guilds && d.guilds.length) {
+                    sel.innerHTML = d.guilds.map(g =>
+                        `<option value="${g.id}">${g.name}</option>`).join('');
+                    loadHizliAyar();
+                } else {
+                    sel.innerHTML = '<option value="">Bot sunucuda değil</option>';
+                }
+            } catch (e) {
+                sel.innerHTML = '<option value="">Yüklenemedi</option>';
+            }
+        }
+
+        function insertToken(fieldId, token) {
+            const el = document.getElementById(fieldId);
+            const start = el.selectionStart ?? el.value.length;
+            const end = el.selectionEnd ?? el.value.length;
+            el.value = el.value.slice(0, start) + token + el.value.slice(end);
+            el.focus();
+            el.selectionStart = el.selectionEnd = start + token.length;
+        }
+
+        async function loadHizliAyar() {
+            const gid = document.getElementById('dm-guild').value;
+            const st = document.getElementById('dm-status');
+            if (!gid) { st.textContent = ''; return; }
+
+            st.style.color = '#888';
+            st.textContent = 'Yükleniyor...';
+
+            try {
+                const d = await fetch('/api/hizli_ayar?guild_id=' + encodeURIComponent(gid))
+                    .then(r => r.json());
+
+                if (d.error) {
+                    st.style.color = '#f44336';
+                    st.textContent = '❌ ' + d.error;
+                    return;
+                }
+
+                document.getElementById('dm-giris-acik').checked = d.dm_giris_acik;
+                document.getElementById('dm-giris-mesaj').value = d.dm_giris_mesaj || '';
+                document.getElementById('dm-cikis-acik').checked = d.dm_cikis_acik;
+                document.getElementById('dm-cikis-mesaj').value = d.dm_cikis_mesaj || '';
+
+                st.style.color = '#4CAF50';
+                st.textContent = '✅ Ayarlar yüklendi';
+            } catch (e) {
+                st.style.color = '#f44336';
+                st.textContent = '❌ ' + e.message;
+            }
+        }
+
+        async function saveHizliAyar() {
+            const gid = document.getElementById('dm-guild').value;
+            const st = document.getElementById('dm-status');
+            if (!gid) { st.style.color = '#f44336'; st.textContent = '❌ Sunucu seçin'; return; }
+
+            st.style.color = '#888';
+            st.textContent = 'Kaydediliyor...';
+
+            try {
+                const d = await fetch('/api/hizli_ayar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        guild_id: gid,
+                        dm_giris_acik: document.getElementById('dm-giris-acik').checked,
+                        dm_giris_mesaj: document.getElementById('dm-giris-mesaj').value,
+                        dm_cikis_acik: document.getElementById('dm-cikis-acik').checked,
+                        dm_cikis_mesaj: document.getElementById('dm-cikis-mesaj').value
+                    })
+                }).then(r => r.json());
+
+                if (d.error) {
+                    st.style.color = '#f44336';
+                    st.textContent = '❌ ' + d.error;
+                } else {
+                    st.style.color = '#4CAF50';
+                    st.textContent = '✅ Kaydedildi!';
+                }
+            } catch (e) {
+                st.style.color = '#f44336';
+                st.textContent = '❌ ' + e.message;
+            }
         }
 
         async function loadVoiceGuilds() {

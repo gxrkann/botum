@@ -100,7 +100,11 @@ class Database:
                 autorole_id INTEGER,
                 levelup_channel_id INTEGER,
                 levelup_message TEXT,
-                rol_log_channel_id INTEGER
+                rol_log_channel_id INTEGER,
+                dm_giris_acik INTEGER DEFAULT 0,
+                dm_giris_mesaj TEXT,
+                dm_cikis_acik INTEGER DEFAULT 0,
+                dm_cikis_mesaj TEXT
             )
         ''')
 
@@ -255,6 +259,14 @@ class Database:
             'farm_log_channel_id',
         ]
 
+        # Giris/cikis DM ayarlari (metin + anahtar kolonlari)
+        dm_columns = [
+            ('dm_giris_acik', 'INTEGER DEFAULT 0'),
+            ('dm_giris_mesaj', 'TEXT'),
+            ('dm_cikis_acik', 'INTEGER DEFAULT 0'),
+            ('dm_cikis_mesaj', 'TEXT'),
+        ]
+
         try:
             async with self.connection.execute("PRAGMA table_info(settings)") as cursor:
                 rows = await cursor.fetchall()
@@ -268,6 +280,13 @@ class Database:
                 if col not in existing:
                     await self.connection.execute(
                         f'ALTER TABLE settings ADD COLUMN {col} INTEGER'
+                    )
+                    print(f"[db] Yeni kolon eklendi: {col}", flush=True)
+
+            for col, coltype in dm_columns:
+                if col not in existing:
+                    await self.connection.execute(
+                        f'ALTER TABLE settings ADD COLUMN {col} {coltype}'
                     )
                     print(f"[db] Yeni kolon eklendi: {col}", flush=True)
 
@@ -387,6 +406,12 @@ class Database:
             data['log_channel_id'] = data.get('log_channel_id')
             data['mute_role_id'] = data.get('mute_role_id')
             data['autorole_id'] = data.get('autorole_id')
+
+            # DM giris/cikis ayarlari (eski satirlarda olmayabilir)
+            data['dm_giris_acik'] = bool(data.get('dm_giris_acik'))
+            data['dm_giris_mesaj'] = data.get('dm_giris_mesaj') or ''
+            data['dm_cikis_acik'] = bool(data.get('dm_cikis_acik'))
+            data['dm_cikis_mesaj'] = data.get('dm_cikis_mesaj') or ''
 
             return data
 
