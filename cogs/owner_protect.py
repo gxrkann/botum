@@ -7,11 +7,7 @@ import os
 
 
 class OwnerProtect(commands.Cog):
-    """
-    Bot sahibinin korunmasi.
-    - Bot, sadece sahibinin (veya belirlenen rollerin) atabilecegi/kickleyebilecegi durum
-    - Sunucu sahibi disinda kimse botu sunucudan atamaz
-    """
+    """Bot sahibinin ve sunucunun korunmasi"""
 
     def __init__(self, bot):
         self.bot = bot
@@ -19,19 +15,16 @@ class OwnerProtect(commands.Cog):
         self.settings = self.load()
 
     def load(self):
-        """Koruma ayarlarini yukle"""
         defaults = {
             'enabled': True,
-            'owner_ids': [],           # Ek korunan kullanicilar (bot sahibi disinda)
-            'protect_roles': [],        # Korunan roller
-            'protected_bots': True,     # Tum botlari koru
-            'allow_ban': False,         # Ban da engellensin mi
+            'owner_ids': [],
+            'protect_roles': [],
+            'protected_bots': True,
             'log_channel_id': None
         }
         try:
             with open(self.config_file, 'r', encoding='utf-8') as f:
-                saved = json.load(f)
-            defaults.update(saved)
+                defaults.update(json.load(f))
         except (FileNotFoundError, json.JSONDecodeError):
             pass
         return defaults
@@ -44,37 +37,25 @@ class OwnerProtect(commands.Cog):
             print(f"[koruma] Ayar kaydedilemedi: {e}", flush=True)
 
     def is_owner(self, member) -> bool:
-        """Uye bot sahibi mi veya korumali mi"""
         if member.id == self.bot.owner_id:
             return True
-        if member.id in [int(x) for x in self.settings.get('owner_ids', [])]:
-            return True
-        return False
+        return member.id in [int(x) for x in self.settings.get('owner_ids', [])]
 
     def is_protected(self, member) -> bool:
-        """Hedef uye korumali mi"""
         if self.is_owner(member):
             return True
-
-        # Tum botlar korunuyorsa
         if member.bot and self.settings.get('protected_bots', True):
             return True
-
-        # Korunan roller
-        protected_roles = {int(x) for x in self.settings.get('protect_roles', [])}
-        if protected_roles:
+        protected = {int(x) for x in self.settings.get('protect_roles', [])}
+        if protected:
             for role in member.roles:
-                if role.id in protected_roles:
+                if role.id in protected:
                     return True
-
-        # Sunucu sahibi her zaman korumali
         if member.guild.owner and member.id == member.guild.owner.id:
             return True
-
         return False
 
     async def log(self, guild, action, target, actor, blocked=False):
-        """Koruma logu"""
         cid = self.settings.get('log_channel_id')
         if not cid:
             return
@@ -82,147 +63,140 @@ class OwnerProtect(commands.Cog):
         if not channel:
             return
 
-        emoji = "🚫" if blocked else "ℹ️"
-        color = discord.Color.red() if blocked else discord.Color.blue()
-
         embed = discord.Embed(
-            title=f"{emoji} {action}",
-            color=color,
+            title=("🚫 " if blocked else "ℹ️ ") + action,
+            color=discord.Color.red() if blocked else discord.Color.blue(),
             timestamp=datetime.now()
         )
         embed.add_field(name="Hedef", value=f"{target.mention} (`{target.id}`)", inline=False)
         embed.add_field(name="İşlemi Yapan", value=f"{actor.mention} (`{actor.id}`)", inline=False)
-        if blocked:
-            embed.add_field(name="Sonuç", value="❌ ENGELLENDİ", inline=False)
-        else:
-            embed.add_field(name="Sonuç", value="✅ İzin verildi", inline=False)
+        embed.add_field(name="Sonuç", value="❌ ENGELLENDİ" if blocked else "✅ İzin verildi", inline=False)
 
         try:
             await channel.send(embed=embed)
         except discord.Forbidden:
             pass
 
-    # ==================== AYAR KOMUTLARI ====================
-    @app_commands.command(name='koruma_ayarla', description='Bot sahibi korumasını ayarla')
+    # ==================== ANA KOMUT ====================
+    @app_commands.command(name='koruma', description='Bot ve sunucu koruma sistemi')
     @app_commands.describe(
-        enabled='Koruma açık mı',
-        allow_ban='Ban da engellensin mi',
-        log_channel='Log kanalı',
-        protected_roles='Korunacak roller'
+        islem='İşlem',
+        uye='Üye',
+        rol='Korunacak rol',
+        kanal='Log kanalı'
     )
-    @app_commands.checks.has_permissions(administrator=True)
-    async def koruma_ayarla(self, interaction: discord.Interaction, enabled: bool = True,
-                            allow_ban: bool = False, log_channel: discord.TextChannel | None = None,
-                            protected_roles: discord.Role | None = None):
-        self.settings['enabled'] = enabled
-        self.settings['allow_ban'] = allow_ban
+    @app_commands.choices(islem=[
+        app_commands.Choice(name='Durum - Koruma durumunu gör', value='durum'),
+        app_commands.Choice(name='Aç/Kapat - Korumayı aç veya kapat', value='ac'),
+        app_commands.Choice(name='Ekle - Ek korunan kişi ekle', value='ekle'),
+        app_commands.Choice(name='Çıkar - Korumadan kişi çıkar', value='cikar'),
+        app_commands.Choice(name='Rol Ekle - Korunacak rol ekle', value='rol_ekle'),
+        app_commands.Choice(name='Log - Log kanalı ayarla', value='log'),
+    ])
+    async def koruma(self, interaction: discord.Interaction, islem: str,
+                     uye: discord.Member | None = None,
+                     rol: discord.Role | None = None,
+                     kanal: discord.TextChannel | None = None):
 
-        if log_channel:
-            self.settings['log_channel_id'] = log_channel.id
-        if protected_roles:
-            if str(protected_roles.id) not in self.settings['protect_roles']:
-                self.settings['protect_roles'].append(str(protected_roles.id))
+        admin = interaction.app_commands.checks.has_permissions(administrator=True)
 
-        self.save()
+        # Durum herkes icin
+        if islem == 'durum':
+            embed = discord.Embed(
+                title="🛡️ Koruma Durumu",
+                color=discord.Color.green() if self.settings['enabled'] else discord.Color.red(),
+                timestamp=datetime.now()
+            )
+            embed.add_field(name="Koruma", value="Açık" if self.settings['enabled'] else "Kapalı", inline=True)
+            embed.add_field(name="Bot Sahibi", value=f"<@{self.bot.owner_id}>" if self.bot.owner_id else "Bilinmiyor", inline=True)
+            embed.add_field(name="Botlar Korumalı", value="Evet" if self.settings['protected_bots'] else "Hayır", inline=True)
+            embed.add_field(name="Ek Korunan Kişi", value=str(len(self.settings['owner_ids'])), inline=True)
+            embed.add_field(name="Korunan Rol", value=str(len(self.settings['protect_roles'])), inline=True)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
 
-        embed = discord.Embed(
-            title="🛡️ Koruma Ayarlandı",
-            color=discord.Color.green(),
-            timestamp=datetime.now()
-        )
-        embed.add_field(name="Durum", value="Açık" if enabled else "Kapalı", inline=True)
-        embed.add_field(name="Ban Engelli", value="Hayır" if allow_ban else "Evet", inline=True)
-        embed.add_field(name="Log Kanalı", value=log_channel.mention if log_channel else "Kapalı", inline=False)
-        embed.add_field(name="Korunan Roller", value=str(len(self.settings['protect_roles'])), inline=True)
-        embed.add_field(name="Ek Korunan Kişi", value=str(len(self.settings['owner_ids'])), inline=True)
-        await interaction.response.send_message(embed=embed)
+        # Geri kalan islemler yonetici gerektirir
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Bu işlem için **Yönetici** yetkisi gerekir!", ephemeral=True)
+            return
 
-    @app_commands.command(name='koruma_ekle', description='Ek korunan kişi ekle')
-    @app_commands.describe(member='Korunacak kişi')
-    @app_commands.checks.has_permissions(administrator=True)
-    async def koruma_ekle(self, interaction: discord.Interaction, member: discord.Member):
-        if str(member.id) not in self.settings['owner_ids']:
-            self.settings['owner_ids'].append(str(member.id))
+        if islem == 'ac':
+            self.settings['enabled'] = not self.settings['enabled']
+            self.save()
+            durum = "Açık" if self.settings['enabled'] else "Kapalı"
+            await interaction.response.send_message(f"🛡️ Koruma: **{durum}**", ephemeral=True)
+
+        elif islem == 'ekle':
+            if not uye:
+                await interaction.response.send_message("❌ Üye seçmelisin!", ephemeral=True)
+                return
+            if str(uye.id) not in self.settings['owner_ids']:
+                self.settings['owner_ids'].append(str(uye.id))
+                self.save()
+            await interaction.response.send_message(
+                f"✅ {uye.mention} eklendi. Artık sadece o da botu atabilir.", ephemeral=True)
+
+        elif islem == 'cikar':
+            if not uye:
+                await interaction.response.send_message("❌ Üye seçmelisin!", ephemeral=True)
+                return
+            if str(uye.id) in self.settings['owner_ids']:
+                self.settings['owner_ids'].remove(str(uye.id))
+                self.save()
+            await interaction.response.send_message(
+                f"✅ {uye.mention} koruma listesinden çıkarıldı.", ephemeral=True)
+
+        elif islem == 'rol_ekle':
+            if not rol:
+                await interaction.response.send_message("❌ Rol seçmelisin!", ephemeral=True)
+                return
+            if str(rol.id) not in self.settings['protect_roles']:
+                self.settings['protect_roles'].append(str(rol.id))
+                self.save()
+            await interaction.response.send_message(
+                f"✅ {rol.mention} korunan rollere eklendi.", ephemeral=True)
+
+        elif islem == 'log':
+            if not kanal:
+                await interaction.response.send_message("❌ Kanal seçmelisin!", ephemeral=True)
+                return
+            self.settings['log_channel_id'] = kanal.id
             self.save()
             await interaction.response.send_message(
-                f"✅ {member.mention} eklendi. Artık sadece o da botu atabilir.",
-                ephemeral=True
-            )
-        else:
-            await interaction.response.send_message("❌ Zaten listede!", ephemeral=True)
-
-    @app_commands.command(name='koruma_cikar', description='Ek korunan kişiyi çıkar')
-    @app_commands.describe(member='Çıkarılacak kişi')
-    @app_commands.checks.has_permissions(administrator=True)
-    async def koruma_cikar(self, interaction: discord.Interaction, member: discord.Member):
-        if str(member.id) in self.settings['owner_ids']:
-            self.settings['owner_ids'].remove(str(member.id))
-            self.save()
-            await interaction.response.send_message(
-                f"✅ {member.mention} koruma listesinden çıkarıldı.", ephemeral=True
-            )
-        else:
-            await interaction.response.send_message("❌ Kişi listede değil!", ephemeral=True)
-
-    @app_commands.command(name='koruma_durum', description='Koruma durumunu gör')
-    async def koruma_durum(self, interaction: discord.Interaction):
-        embed = discord.Embed(
-            title="🛡️ Koruma Durumu",
-            color=discord.Color.green() if self.settings['enabled'] else discord.Color.red(),
-            timestamp=datetime.now()
-        )
-        embed.add_field(name="Koruma", value="Açık" if self.settings['enabled'] else "Kapalı", inline=True)
-        embed.add_field(name="Bot Sahibi", value=f"<@{self.bot.owner_id}>" if self.bot.owner_id else "Bilinmiyor", inline=True)
-        embed.add_field(name="Tüm Botlar Korumalı", value="Evet" if self.settings['protected_bots'] else "Hayır", inline=True)
-        embed.add_field(name="Ban Engelli", value="Evet" if not self.settings['allow_ban'] else "Hayır", inline=True)
-        embed.add_field(name="Ek Korunan", value=str(len(self.settings['owner_ids'])), inline=True)
-        embed.add_field(name="Korunan Rol", value=str(len(self.settings['protect_roles'])), inline=True)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+                f"✅ Koruma log kanalı: {kanal.mention}", ephemeral=True)
 
     # ==================== EVENT KORUMA ====================
     @commands.Cog.listener()
     async def on_member_remove(self, member):
-        """Bot atildi mi veya korumali biri atildi mi"""
         if not self.settings['enabled']:
             return
 
-        # Bot atildi
         if member.id == self.bot.user.id:
             print(f"[KORUMA] Bot sunucudan atildi: {member.guild.name}", flush=True)
             try:
                 await member.guild.owner.send(
-                    f"⚠️ **BOT SUNUCUDAN ATILDI!**\n"
-                    f"**Sunucu:** {member.guild.name}\n"
-                    f"**Yapan:** {member.guild.owner.mention}\n\n"
-                    f"Botu geri eklemek için davet linki:\n"
+                    "⚠️ **BOT SUNUCUDAN ATILDI!**\n\n"
+                    f"**Sunucu:** {member.guild.name}\n\n"
+                    "Botu geri ekle:\n"
                     f"https://discord.com/api/oauth2/authorize?client_id={self.bot.user.id}&permissions=8&scope=bot"
                 )
             except discord.Forbidden:
                 pass
             return
 
-        # Korumali biri mi atildi
         if self.is_protected(member) and not self.is_owner(member):
-            await self.log(
-                member.guild, "Korunan Üye Sunucudan Ayrıldı",
-                member, member.guild.owner, blocked=True
-            )
+            await self.log(member.guild, "Korunan Üye Sunucudan Ayrıldı",
+                           member, member.guild.owner, blocked=True)
 
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
-        """Botun rolleri degistirildi mi"""
         if after.id != self.bot.user.id:
             return
-
         if before.roles != after.roles:
-            # Rollere mudahale edilmis, eski haline dondur
             try:
                 await after.edit(roles=before.roles)
-                print("[KORUMA] Bot rolleri geri alindi", flush=True)
-                await self.log(
-                    after.guild, "Bot Rolü Korundu",
-                    after, after.guild.owner, blocked=True
-                )
+                await self.log(after.guild, "Bot Rolü Korundu",
+                               after, after.guild.owner, blocked=True)
             except discord.Forbidden:
                 pass
 

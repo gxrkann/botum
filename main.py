@@ -87,19 +87,62 @@ class Bot(commands.Bot):
                 logger.info(f'Loaded: {cog}')
             except Exception as e:
                 logger.error(f'Failed to load {cog}: {e}')
-        
-        # Sync slash commands
+
+    async def sync_commands(self):
+        """
+        Slash komutlarini sunucuya ozel kaydet.
+
+        Discord global kayitta 100 komut siniri koyar. Bizde 100+ komut
+        oldugu icin sunucu bazli (guild) kayit kullanilir - sunucu basina
+        100 komut siniri var ve tek sunucuda yeterli.
+        """
+        total = len(self.tree.get_commands())
+        logger.info(f'Toplam {total} komut tanimli')
+
+        # 1) Global kaydi temizle (eski global varsa sil)
         try:
-            synced = await self.tree.sync()
-            logger.info(f'Synced {len(synced)} slash commands')
-        except Exception as e:
-            logger.error(f'Failed to sync slash commands: {e}')
+            guild_ids = [g.id for g in self.guilds]
+            await self.tree.clear_commands(guild_ids=guild_ids,
+                                           app_commands=self.application.commands if hasattr(self, 'application') else None)
+        except Exception:
+            pass
+
+        # 2) Her sunucuya ozel kaydet
+        synced_total = 0
+        for guild in self.guilds:
+            try:
+                self.tree.copy_global_to(guild=guild)
+                synced = await self.tree.sync(guild=guild)
+                synced_total += len(synced)
+                logger.info(f'{guild.name}: {len(synced)} komut kaydedildi')
+            except Exception as e:
+                logger.error(f'{guild.name} sync hatasi: {e}')
+
+        # 3) Sunucu yoksa gecici olarak global dene
+        if not self.guilds:
+            try:
+                if total <= 100:
+                    synced = await self.tree.sync()
+                    logger.info(f'Gecici global kayit: {len(synced)} komut')
+                else:
+                    logger.warning(
+                        f'{total} komut var ama global sinir 100. '
+                        'Bot bir sunucuya eklenince sunucu bazli kayit yapilacak.'
+                    )
+            except Exception as e:
+                logger.error(f'Gecici sync hatasi: {e}')
+
+        if synced_total:
+            logger.info(f'Toplam {synced_total} komut aktif')
+        else:
+            logger.info('Henuz sunucu yok - komutlar bir sunucuya eklenince kaydedilecek')
 
     async def on_ready(self):
         logger.info(f'{self.user} has connected to Discord!')
         logger.info(f'Bot is in {len(self.guilds)} guilds')
 
         await self.apply_activity()
+        await self.sync_commands()
 
     def _load_activity_config(self):
         """Dashboard'dan kaydedilen oyun/activity ayarlarini yukle"""
