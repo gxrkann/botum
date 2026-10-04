@@ -416,6 +416,43 @@ def api_bot_profile():
 
     data = request.json or {}
 
+    # Sadece Discord CDN adresleri kabul edilir
+    ALLOWED_HOSTS = (
+        'cdn.discordapp.com',
+        'media.discordapp.net',
+        'images-ext-1.discordapp.net',
+        'images-ext-2.discordapp.net',
+    )
+    ALLOWED_SCHEMES = ('http://', 'https://')
+
+    def validate_url(url):
+        """Discord CDN adresi mi kontrol et"""
+        from urllib.parse import urlparse
+        url = url.strip()
+        if not url.lower().startswith(ALLOWED_SCHEMES):
+            return False, 'Sadece http:// veya https:// ile baslayan adres kabul edilir'
+        try:
+            parsed = urlparse(url)
+        except ValueError:
+            return False, 'Gecersiz adres'
+
+        host = (parsed.hostname or '').lower()
+        if host not in ALLOWED_HOSTS:
+            return False, f'Sadece Discord CDN kabul edilir ({", ".join(ALLOWED_HOSTS[:2])})'
+
+        return True, None
+
+    errors = []
+    for kind in ('avatar', 'banner'):
+        url = (data.get(kind) or '').strip()
+        if url:
+            ok, err = validate_url(url)
+            if not ok:
+                errors.append(f'{kind}: {err}')
+
+    if errors:
+        return jsonify({'error': ' | '.join(errors)}), 400
+
     async def apply_profile():
         avatar_bytes = None
         banner_bytes = None
