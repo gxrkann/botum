@@ -628,21 +628,24 @@
                     <label style="display: block; margin-bottom: 5px; color: #888;">Profil Resmi URL</label>
                     <input type="text" id="avatar-url" placeholder="https://cdn.discordapp.com/avatars/.../avatar.png"
                            style="width: 100%; padding: 10px; border-radius: calc(var(--radius) * 0.5); border: 1px solid var(--card-border); background: var(--card-bg); color: #fff;">
-                    <small style="color: #666; display: block; margin-top: 4px;">Sadece Discord CDN (cdn.discordapp.com) • Maks 8 MB</small>
+                    <small style="color: #666; display: block; margin-top: 4px;">
+                        Discord CDN, Imgur, Reddit, GitHub, Twitter • Maks 8 MB
+                    </small>
                 </div>
 
                 <div style="margin-bottom: 20px;">
                     <label style="display: block; margin-bottom: 5px; color: #888;">Banner URL</label>
                     <input type="text" id="banner-url" placeholder="https://cdn.discordapp.com/banners/.../banner.png"
                            style="width: 100%; padding: 10px; border-radius: calc(var(--radius) * 0.5); border: 1px solid var(--card-border); background: var(--card-bg); color: #fff;">
-                    <small style="color: #666; display: block; margin-top: 4px;">Sadece Discord CDN • Bot 2+ sunucuda ve Yönetici yetkili olmalı</small>
+                    <small style="color: #666; display: block; margin-top: 4px;">Aynı hostlar • Tek sunucuda da çalışır</small>
                 </div>
 
                 <button class="refresh-btn" onclick="updateBotProfile()">🖼️ Görselleri Güncelle</button>
                 <div id="profile-status" style="margin-top: 10px; color: #4caf50;"></div>
 
                 <small style="color: #666; display: block; margin-top: 12px;">
-                    Discord'da bir resme <b>sağ tık → Bağlantıyı Kopyala</b> yaparak adresi alabilirsin.
+                    <b>Kabul edilenler:</b> cdn.discordapp.com, i.imgur.com, i.redd.it, raw.githubusercontent.com, pbs.twimg.com<br>
+                    <b>Kabul edilmeyenler:</b> yerel dosyalar, localhost, özel ağ adresleri (güvenlik için)
                 </small>
             </div>
 

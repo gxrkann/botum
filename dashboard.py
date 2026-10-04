@@ -416,29 +416,75 @@ def api_bot_profile():
 
     data = request.json or {}
 
-    # Sadece Discord CDN adresleri kabul edilir
+    # Guvenli resim adresleri - Discord CDN + yaygin resim hostlari
     ALLOWED_HOSTS = (
         'cdn.discordapp.com',
         'media.discordapp.net',
         'images-ext-1.discordapp.net',
         'images-ext-2.discordapp.net',
+        'i.imgur.com',
+        'imgur.com',
+        'cdn.discord.com',
+        'discordapp.com',
+        'discordapp.net',
+        'pbs.twimg.com',
+        'i.redd.it',
+        'redd.it',
+        'github.com',
+        'raw.githubusercontent.com',
+        'media.githubusercontent.com',
+        'gitlab.com',
     )
     ALLOWED_SCHEMES = ('http://', 'https://')
 
+    # Tehlikeli/ozel ag adresleri (SSRF korumasi)
+    BLOCKED_HOSTS = (
+        'localhost', '127.0.0.1', '0.0.0.0', '::1',
+        '169.254.169.254',  # AWS metadata
+        'metadata.google.internal',
+    )
+
     def validate_url(url):
-        """Discord CDN adresi mi kontrol et"""
+        """Guvenli resim adresi mi kontrol et"""
         from urllib.parse import urlparse
+        import ipaddress
+
         url = url.strip()
+        if not url:
+            return False, 'Adres bos'
+
         if not url.lower().startswith(ALLOWED_SCHEMES):
             return False, 'Sadece http:// veya https:// ile baslayan adres kabul edilir'
+
         try:
             parsed = urlparse(url)
         except ValueError:
             return False, 'Gecersiz adres'
 
         host = (parsed.hostname or '').lower()
-        if host not in ALLOWED_HOSTS:
-            return False, f'Sadece Discord CDN kabul edilir ({", ".join(ALLOWED_HOSTS[:2])})'
+        if not host:
+            return False, 'Adres yazilmis degil'
+
+        if host in BLOCKED_HOSTS:
+            return False, 'Bu adres guvenlik nedeniyle engellendi'
+
+        # Ozel IP araliklari engellenir
+        try:
+            ip = ipaddress.ip_address(host)
+            if ip.is_private or ip.is_loopback or ip.is_link_local:
+                return False, 'Ozel ag adresleri guvenlik nedeniyle engellendi'
+        except ValueError:
+            pass  # IP degil, domain - devam et
+
+        # Bilinen host veya tum alt domain'lere izin ver
+        allowed = any(
+            host == h or host.endswith('.' + h)
+            for h in ALLOWED_HOSTS
+        )
+
+        if not allowed:
+            return False, ('Bu adres kabul edilmiyor. Discord CDN veya bilinen '
+                          'resim hostlari (imgur, redd.it, github, twitter) kullanin')
 
         return True, None
 
@@ -503,7 +549,7 @@ def api_bot_profile():
         except discord.Forbidden:
             return False, ['Discord bu degisiklige izin vermedi (bot yetkisi yetersiz)']
         except discord.HTTPException as e:
-            return False, [f'Discord reddetti: {e.status} - Banner icin bot 2+ sunucuda olmali']
+            return False, [f'Discord reddetti (HTTP {e.status}): {e.text}']
 
     try:
         ok, result = run_async(apply_profile(), timeout=25)
