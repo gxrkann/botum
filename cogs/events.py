@@ -1,7 +1,8 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from datetime import datetime
+from datetime import datetime, timezone
+import asyncio
 import time
 
 
@@ -220,26 +221,98 @@ class Events(commands.Cog):
 
     # ==================== SES ====================
     @commands.Cog.listener()
+    async def _find_voice_actor(self, guild, member, kinds):
+        """Ses kanalı işlemini kim yaptı? Audit log'dan bulur."""
+        action_map = {
+            'kick': discord.AuditLogAction.member_disconnect,
+            'move': discord.AuditLogAction.member_move,
+            'mute': discord.AuditLogAction.member_mute,
+            'deafen': discord.AuditLogAction.member_deafen,
+            'update': discord.AuditLogAction.member_update,
+        }
+        actions = [action_map[k] for k in kinds if k in action_map]
+        if not actions:
+            return None
+
+        now = datetime.now(timezone.utc)
+        try:
+            async for entry in guild.audit_logs(limit=8):
+                if entry.action not in actions:
+                    continue
+                target = entry.target
+                if not isinstance(target, discord.Member) or target.id != member.id:
+                    continue
+                if (now - entry.created_at).total_seconds() > 15:
+                    break
+                return entry.user
+        except discord.Forbidden:
+            return None
+        except Exception:
+            return None
+        return None
+
+    @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
+        """
+        Ses logu - SADECE islem bazli kayitlar.
+
+        Normal kanal giris/cikis kalabaliklastiriyordu ve atildi mi
+        yoksa kendisi mi cikti anlasilamiyordu. Artik sadece:
+          • Biri tarafindan atildi
+          • Biri tarafindan tasiindi
+          • Sunucu susturuldu / sagirlastirildi
+        kaydedilir ve kimin yaptigi audit log'dan bulunur.
+        """
         if member.bot:
             return
         if before.channel == after.channel:
             return
 
-        if before.channel is None and after.channel is not None:
-            title = "🔊 Ses Kanalına Katıldı"
-            desc = f"{member.mention} → {after.channel.mention}"
-            color = discord.Color.green()
-        elif before.channel is not None and after.channel is None:
-            title = "🔇 Ses Kanaldan Ayrıldı"
-            desc = f"{member.mention} ← {before.channel.mention}"
+        # K hicbir kanaldan giris - asla "biri yapti" olamaz, sorgu gereksiz
+        if before.channel is None:
+            return
+
+        # Atildi mi, tasindi mi belirle
+        kinds = []
+        if after.channel is None:
+            kinds.append('kick')       # atildi VEYA kendisi cikti
+        else:
+            kinds.append('move')       # tasiindi VEYA kendisi tasindi
+
+        # Kullanici kendi ciktiysa/yer degistirdiyse audit log'da kayit
+        # olmaz, actor None doner ve log dusmez. Boylece sadece
+        # BASKASININ yaptigi islemler kaydedilir.
+        await asyncio.sleep(1.2)
+        actor = await self._find_voice_actor(member.guild, member, kinds)
+
+        if actor is None:
+            # Kimse yapmadi -> kullanici kendi cikmis/tasimistir, loglama
+            return
+
+        if actor.bot:
+            return
+
+        # Botun kendi hub tasimalari (bot oldugu icin zaten ustte elendi)
+
+        if 'kick' in kinds:
+            title = "🔨 Ses Kanalından Atıldı"
+            desc = f"{member.mention} → **{before.channel.mention}** kanalından çıkarıldı"
             color = discord.Color.red()
         else:
-            title = "➡️ Ses Kanalı Değiştirdi"
-            desc = f"{member.mention}\n{before.channel.mention} → {after.channel.mention}"
-            color = discord.Color.blue()
+            title = "➡️ Ses Kanalı Taşındı"
+            desc = (f"{member.mention}\n{before.channel.mention} → "
+                    f"**{after.channel.mention}**")
+            color = discord.Color.orange()
 
-        embed = discord.Embed(title=title, description=desc, color=color, timestamp=datetime.now())
+        embed = discord.Embed(title=title, description=desc, color=color,
+                              timestamp=datetime.now())
+        embed.add_field(name="İşlemi Yapan",
+                        value=f"{actor.mention} (`{actor.id}`)", inline=False)
+        embed.add_field(name="Üye ID", value=f"`{member.id}`", inline=True)
+
+        if before.channel is not None:
+            embed.add_field(name="Kanal", value=before.channel.mention, inline=True)
+
         try:
             embed.set_thumbnail(url=member.display_avatar.url)
         except Exception:
