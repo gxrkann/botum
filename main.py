@@ -74,6 +74,8 @@ class Bot(commands.Bot):
             'cogs.fivem',
             'cogs.giveaway',
             'cogs.voice_tracker',
+            'cogs.voice_manager',
+            'cogs.owner_protect',
             'cogs.guard',
             'cogs.announcement',
             'dashboard'

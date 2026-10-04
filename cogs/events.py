@@ -222,6 +222,7 @@ class Events(commands.Cog):
     # ==================== UYE GUNCELLEME ====================
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
+        # Takma ad degisikligi -> uye-log
         if before.nick != after.nick:
             embed = discord.Embed(
                 title="📝 Takma Ad Değişti",
@@ -233,6 +234,7 @@ class Events(commands.Cog):
             embed.add_field(name="Sonra", value=after.nick or "*Yok*", inline=True)
             await self._send_log(after.guild.id, 'member', embed)
 
+        # Rol degisiklikleri -> rol-log
         added = set(after.roles) - set(before.roles)
         removed = set(before.roles) - set(after.roles)
 
@@ -243,7 +245,9 @@ class Events(commands.Cog):
                 color=discord.Color.green(),
                 timestamp=datetime.now()
             )
-            await self._send_log(after.guild.id, 'member', embed)
+            embed.add_field(name="Üye ID", value=f"`{after.id}`", inline=True)
+            embed.add_field(name="Eklenen Roller", value=", ".join(r.name for r in added), inline=False)
+            await self._send_log(after.guild.id, 'rol', embed)
 
         if removed:
             embed = discord.Embed(
@@ -252,7 +256,9 @@ class Events(commands.Cog):
                 color=discord.Color.red(),
                 timestamp=datetime.now()
             )
-            await self._send_log(after.guild.id, 'member', embed)
+            embed.add_field(name="Üye ID", value=f"`{after.id}`", inline=True)
+            embed.add_field(name="Kaldırılan Roller", value=", ".join(r.name for r in removed), inline=False)
+            await self._send_log(after.guild.id, 'rol', embed)
 
     # ==================== KANAL / ROL ====================
     @commands.Cog.listener()

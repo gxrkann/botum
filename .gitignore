@@ -267,3 +267,7 @@ _test_commands.py
 _fix_optional.py
 
 dashboard_theme.json
+
+activity_images/
+owner_protect.json
+_*.py

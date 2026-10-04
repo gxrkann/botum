@@ -425,8 +425,8 @@
 <body>
     <div class="container">
         <header>
-            <h1>🤖 Discord Bot Dashboard</h1>
-            <p><span class="status-indicator"></span>Bot çevrimiçi • Son güncelleme: <span id="last-update">-</span></p>
+            <h1 id="page-title">🤖 Discord Bot Dashboard</h1>
+            <p><span id="page-subtitle"></span> <span class="status-indicator"></span>Son güncelleme: <span id="last-update">-</span></p>
         </header>
 
         <button class="refresh-btn" onclick="refreshData()">🔄 Yenile</button>
@@ -460,16 +460,17 @@
         </div>
 
         <div class="tabs">
-            <div class="tab active" onclick="showTab('guilds')">🏠 Sunucular</div>
-            <div class="tab" onclick="showTab('commands')">⌨️ Komutlar</div>
-            <div class="tab" onclick="showTab('logs')">📋 Loglar</div>
-            <div class="tab" onclick="showTab('backups')">💾 Yedekler</div>
-            <div class="tab" onclick="showTab('farm')">🌾 Farm</div>
-            <div class="tab" onclick="showTab('fivem')">🔫 FiveM</div>
-            <div class="tab" onclick="showTab('giveaways')">🎉 Çekiliş</div>
-            <div class="tab" onclick="showTab('voice')">🎤 Ses</div>
-            <div class="tab" onclick="showTab('guard')">🛡️ Guard</div>
-            <div class="tab" onclick="showTab('settings')">⚙️ Ayarlar</div>
+            <div class="tab active" data-tab="guilds" onclick="showTab('guilds')">🏠 Sunucular</div>
+            <div class="tab" data-tab="commands" onclick="showTab('commands')">⌨️ Komutlar</div>
+            <div class="tab" data-tab="logs" onclick="showTab('logs')">📋 Loglar</div>
+            <div class="tab" data-tab="backups" onclick="showTab('backups')">💾 Yedekler</div>
+            <div class="tab" data-tab="farm" onclick="showTab('farm')">🌾 Farm</div>
+            <div class="tab" data-tab="fivem" onclick="showTab('fivem')">🔫 FiveM</div>
+            <div class="tab" data-tab="giveaways" onclick="showTab('giveaways')">🎉 Çekiliş</div>
+            <div class="tab" data-tab="voice" onclick="showTab('voice')">🎤 Ses</div>
+            <div class="tab" data-tab="guard" onclick="showTab('guard')">🛡️ Guard</div>
+            <div class="tab" data-tab="design" onclick="showTab('design')">🎨 Tasarım</div>
+            <div class="tab" data-tab="settings" onclick="showTab('settings')">⚙️ Ayarlar</div>
         </div>
 
         <div id="tab-guilds" class="tab-content active">
@@ -574,6 +575,88 @@
             </div>
         </div>
 
+        <div id="tab-design" class="tab-content">
+            <div class="section">
+                <h2>🎨 Hazır Tasarımlar</h2>
+                <div id="preset-list" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;"></div>
+            </div>
+
+            <div class="section">
+                <h2>⚡ Hızlı Ayarlar</h2>
+
+                <div class="theme-grid">
+                    <div>
+                        <label style="display:block;margin-bottom:5px;color:#888;font-size:0.9em;">Başlık</label>
+                        <input type="text" id="th-title" oninput="saveTheme()" placeholder="Başlık"
+                               style="width:100%;padding:10px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;">
+                    </div>
+                    <div>
+                        <label style="display:block;margin-bottom:5px;color:#888;font-size:0.9em;">Alt Başlık</label>
+                        <input type="text" id="th-subtitle" oninput="saveTheme()" placeholder="Alt başlık"
+                               style="width:100%;padding:10px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;">
+                    </div>
+                </div>
+
+                <div class="theme-grid">
+                    <div class="color-row">
+                        <label style="color:#888;font-size:0.9em;min-width:90px;">Ana Renk</label>
+                        <input type="color" id="th-accent" oninput="liveTheme()">
+                        <input type="text" id="th-accent-t" oninput="liveThemeText()">
+                    </div>
+                    <div class="color-row">
+                        <label style="color:#888;font-size:0.9em;min-width:90px;">Vurgu 2</label>
+                        <input type="color" id="th-accent2" oninput="liveTheme()">
+                        <input type="text" id="th-accent2-t" oninput="liveThemeText()">
+                    </div>
+                    <div class="color-row">
+                        <label style="color:#888;font-size:0.9em;min-width:90px;">Arka Plan</label>
+                        <input type="color" id="th-bg1" oninput="liveTheme()">
+                        <input type="text" id="th-bg1-t" oninput="liveThemeText()">
+                    </div>
+                    <div class="color-row">
+                        <label style="color:#888;font-size:0.9em;min-width:90px;">Arka Plan 2</label>
+                        <input type="color" id="th-bg2" oninput="liveTheme()">
+                        <input type="text" id="th-bg2-t" oninput="liveThemeText()">
+                    </div>
+                </div>
+
+                <div class="theme-grid">
+                    <div>
+                        <label style="display:block;margin-bottom:5px;color:#888;font-size:0.9em;">Yazı Tipi</label>
+                        <select id="th-font" onchange="saveTheme()" style="width:100%;padding:10px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;">
+                            <option value="'Segoe UI', Tahoma, Geneva, Verdana, sans-serif">Segoe UI</option>
+                            <option value="Arial, sans-serif">Arial</option>
+                            <option value="'Courier New', monospace">Monospace</option>
+                            <option value="Georgia, serif">Georgia</option>
+                            <option value="Verdana, sans-serif">Verdana</option>
+                            <option value="'Trebuchet MS', sans-serif">Trebuchet</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block;margin-bottom:5px;color:#888;font-size:0.9em;">Köşe Yuvarlaklığı: <span id="th-radius-val">12</span>px</label>
+                        <input type="range" id="th-radius" min="0" max="30" value="12" oninput="liveTheme()"
+                               style="width:100%;accent-color:var(--accent);">
+                    </div>
+                    <div>
+                        <label style="display:block;margin-bottom:5px;color:#888;font-size:0.9em;">Yenileme: <span id="th-int-val">30</span> sn</label>
+                        <input type="range" id="th-interval" min="5" max="300" value="30" oninput="liveTheme()"
+                               style="width:100%;accent-color:var(--accent);">
+                    </div>
+                </div>
+
+                <div style="margin-top: 15px;">
+                    <label style="display:block;margin-bottom:8px;color:#888;font-size:0.9em;">Gizlenecek Sekmeler</label>
+                    <div id="tab-toggles" style="display:flex;gap:12px;flex-wrap:wrap;"></div>
+                </div>
+
+                <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;">
+                    <button class="refresh-btn" onclick="saveTheme(true)">💾 Kaydet</button>
+                    <button class="refresh-btn" onclick="resetTheme()" style="background:linear-gradient(90deg,#e74c3c,#c0392b);">↺ Sıfırla</button>
+                    <span id="theme-saved" style="color:#4caf50;align-self:center;"></span>
+                </div>
+            </div>
+        </div>
+
         <div id="tab-settings" class="tab-content">
             <div class="section">
                 <h2>Bot Durumu (Oynadığı Oyun)</h2>
@@ -587,6 +670,13 @@
                     <label style="display: block; margin-bottom: 5px; color: #888;">Büyük Resim (Asset ID)</label>
                     <input type="text" id="bot-large-image" placeholder="fivem_logo" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #fff;">
                     <small style="color: #666; display: block; margin-top: 4px;">Developer Portal → Rich Presence → Art Assets'te yüklediğin resmin adı</small>
+                    <div style="margin-top: 10px;">
+                        <input type="file" id="large-image-file" accept="image/png,image/jpeg,image/gif,image/webp"
+                               style="width: 100%; padding: 8px; border-radius: calc(var(--radius) * 0.5); border: 1px dashed var(--card-border); background: var(--card-bg); color: #ccc; cursor: pointer;">
+                    </div>
+                    <div id="large-preview-wrap" style="margin-top: 10px; display: none;">
+                        <img id="large-preview" style="width: 128px; height: 128px; border-radius: 50%; border: 2px solid var(--card-border);">
+                    </div>
                 </div>
 
                 <div style="margin-bottom: 15px;">
@@ -631,6 +721,10 @@
                     <small style="color: #666; display: block; margin-top: 4px;">
                         Discord CDN, Imgur, Reddit, GitHub, Twitter • Maks 8 MB
                     </small>
+                    <div style="margin-top: 10px;">
+                        <input type="file" id="avatar-file" accept="image/png,image/jpeg,image/gif,image/webp"
+                               style="width: 100%; padding: 8px; border-radius: calc(var(--radius) * 0.5); border: 1px dashed var(--card-border); background: var(--card-bg); color: #ccc; cursor: pointer;">
+                    </div>
                 </div>
 
                 <div style="margin-bottom: 20px;">
@@ -638,7 +732,14 @@
                     <input type="text" id="banner-url" placeholder="https://cdn.discordapp.com/banners/.../banner.png"
                            style="width: 100%; padding: 10px; border-radius: calc(var(--radius) * 0.5); border: 1px solid var(--card-border); background: var(--card-bg); color: #fff;">
                     <small style="color: #666; display: block; margin-top: 4px;">Aynı hostlar • Tek sunucuda da çalışır</small>
+                    <div style="margin-top: 10px;">
+                        <input type="file" id="banner-file" accept="image/png,image/jpeg,image/gif,image/webp"
+                               style="width: 100%; padding: 8px; border-radius: calc(var(--radius) * 0.5); border: 1px dashed var(--card-border); background: var(--card-bg); color: #ccc; cursor: pointer;">
+                    </div>
                 </div>
+
+                <button class="refresh-btn" onclick="uploadBotFiles()" style="margin-top: 12px; background: linear-gradient(90deg, #4caf50, #00b894);">📁 Dosya Yükle</button>
+                <div id="upload-status" style="margin-top: 10px; color: #4caf50;"></div>
 
                 <button class="refresh-btn" onclick="updateBotProfile()">🖼️ Görselleri Güncelle</button>
                 <div id="profile-status" style="margin-top: 10px; color: #4caf50;"></div>
@@ -647,6 +748,38 @@
                     <b>Kabul edilenler:</b> cdn.discordapp.com, i.imgur.com, i.redd.it, raw.githubusercontent.com, pbs.twimg.com<br>
                     <b>Kabul edilmeyenler:</b> yerel dosyalar, localhost, özel ağ adresleri (güvenlik için)
                 </small>
+            </div>
+
+            <div class="section">
+                <h2>🔊 Ses Kanalı Kontrolü</h2>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; color: #888;">Sunucu</label>
+                    <select id="voice-guild" onchange="loadVoiceChannels()"
+                            style="width: 100%; padding: 10px; border-radius: calc(var(--radius) * 0.5); border: 1px solid var(--card-border); background: var(--card-bg); color: #fff;">
+                        <option value="">Yükleniyor...</option>
+                    </select>
+                </div>
+
+                <div style="margin-bottom: 10px;">
+                    <label style="display: block; margin-bottom: 5px; color: #888;">Ses Kanalı</label>
+                    <select id="voice-channel"
+                            style="width: 100%; padding: 10px; border-radius: calc(var(--radius) * 0.5); border: 1px solid var(--card-border); background: var(--card-bg); color: #fff;">
+                        <option value="">Önce sunucu seç</option>
+                    </select>
+                </div>
+
+                <div id="voice-current" style="margin-bottom: 12px; color: #888; font-size: 0.9em;">
+                    Durum: Bilinmiyor
+                </div>
+
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button class="refresh-btn" onclick="voiceAction('join')">🔗 Bağlan / Taşı</button>
+                    <button class="refresh-btn" onclick="voiceAction('leave')" style="background: linear-gradient(90deg, #e74c3c, #c0392b);">🚪 Ayrıl</button>
+                    <button class="refresh-btn" onclick="loadVoiceChannels()" style="background: linear-gradient(90deg, #636e72, #4a4a4a);">🔄 Yenile</button>
+                </div>
+
+                <div id="voice-status" style="margin-top: 10px; color: #4caf50;"></div>
             </div>
 
             <div class="section">
@@ -860,6 +993,359 @@
             }
         }
 
+        const PRESETS = {
+            'Koyu':      {accent:'#00d4ff', accent2:'#7b2cbf', bg1:'#1a1a2e', bg2:'#16213e'},
+            'Lacivert':  {accent:'#4facfe', accent2:'#00f2fe', bg1:'#0f2027', bg2:'#203a43'},
+            'Kırmızı':   {accent:'#ff416c', accent2:'#ff4b2b', bg1:'#1a1a1a', bg2:'#2d1a1a'},
+            'Yeşil':     {accent:'#00ff9d', accent2:'#00b894', bg1:'#0f1f17', bg2:'#152a20'},
+            'Mor':       {accent:'#a55eea', accent2:'#fc5c7d', bg1:'#1b1530', bg2:'#2a1f4a'},
+            'Turuncu':   {accent:'#ff9a44', accent2:'#fc6076', bg1:'#1f1812', bg2:'#2e2318'},
+            'Siyah':     {accent:'#e0e0e0', accent2:'#9e9e9e', bg1:'#000000', bg2:'#141414'},
+            'Beyaz':     {accent:'#2563eb', accent2:'#7c3aed', bg1:'#f0f2f5', bg2:'#e2e8f0'}
+        };
+
+        let THEME = {};
+        let themeTimer = null;
+
+        function applyTheme(c) {
+            THEME = Object.assign({}, THEME, c);
+            const r = document.documentElement.style;
+            r.setProperty('--accent', THEME.accent);
+            r.setProperty('--accent-2', THEME.accent2);
+            r.setProperty('--bg-1', THEME.bg1);
+            r.setProperty('--bg-2', THEME.bg2);
+            r.setProperty('--radius', (THEME.rounded_corners ?? 12) + 'px');
+            r.setProperty('--font', THEME.font_family || "'Segoe UI', sans-serif");
+            r.setProperty('--text', THEME.text_color || '#fff');
+            r.setProperty('--muted', THEME.muted_color || '#888');
+            document.body.style.color = THEME.text_color || '#fff';
+
+            document.title = THEME.title || 'Discord Bot Dashboard';
+            const st = document.getElementById('page-subtitle');
+            if (st) st.textContent = THEME.subtitle || '';
+        }
+
+        function liveTheme() {
+            applyTheme({
+                accent: document.getElementById('th-accent').value,
+                accent2: document.getElementById('th-accent2').value,
+                bg1: document.getElementById('th-bg1').value,
+                bg2: document.getElementById('th-bg2').value,
+                rounded_corners: parseInt(document.getElementById('th-radius').value),
+                refresh_interval: parseInt(document.getElementById('th-interval').value)
+            });
+            document.getElementById('th-radius-val').textContent = document.getElementById('th-radius').value;
+            document.getElementById('th-int-val').textContent = document.getElementById('th-interval').value;
+            syncColorTexts();
+            scheduleSave();
+        }
+
+        function liveThemeText() {
+            const pairs = [['th-accent','th-accent-t'],['th-accent2','th-accent2-t'],
+                           ['th-bg1','th-bg1-t'],['th-bg2','th-bg2-t']];
+            const o = {};
+            pairs.forEach(([cid, tid]) => {
+                const val = document.getElementById(tid).value.trim();
+                if (/^#[0-9a-fA-F]{6}$/.test(val)) {
+                    document.getElementById(cid).value = val;
+                    o[cid.replace('th-', '')] = val;
+                }
+            });
+            if (Object.keys(o).length) {
+                applyTheme({
+                    accent: o['accent'] ?? THEME.accent,
+                    accent2: o['accent2'] ?? THEME.accent2,
+                    bg1: o['bg1'] ?? THEME.bg1,
+                    bg2: o['bg2'] ?? THEME.bg2
+                });
+                scheduleSave();
+            }
+        }
+
+        function syncColorTexts() {
+            const pairs = [['th-accent','th-accent-t'],['th-accent2','th-accent2-t'],
+                           ['th-bg1','th-bg1-t'],['th-bg2','th-bg2-t']];
+            pairs.forEach(([cid, tid]) => {
+                document.getElementById(tid).value = document.getElementById(cid).value;
+            });
+        }
+
+        function scheduleSave() {
+            clearTimeout(themeTimer);
+            themeTimer = setTimeout(() => saveTheme(true), 900);
+        }
+
+        async function saveTheme(showMsg) {
+            const payload = {
+                title: document.getElementById('th-title').value,
+                subtitle: document.getElementById('th-subtitle').value,
+                accent_color: document.getElementById('th-accent').value,
+                accent_color_2: document.getElementById('th-accent2').value,
+                bg_color: document.getElementById('th-bg1').value,
+                bg_color_2: document.getElementById('th-bg2').value,
+                font_family: document.getElementById('th-font').value,
+                rounded_corners: parseInt(document.getElementById('th-radius').value),
+                refresh_interval: parseInt(document.getElementById('th-interval').value),
+                hide_tabs: Array.from(document.querySelectorAll('#tab-toggles input:checked')).map(i => i.value),
+                show_stats: true
+            };
+            try {
+                await fetch('/api/dashboard_theme', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                applyTheme(payload);
+                if (showMsg) {
+                    const el = document.getElementById('theme-saved');
+                    el.textContent = '✅ Kaydedildi';
+                    setTimeout(() => el.textContent = '', 2000);
+                }
+                applyTabVisibility();
+                restartRefresh();
+            } catch (e) {
+                console.error('Tema kaydedilemedi', e);
+            }
+        }
+
+        async function resetTheme() {
+            if (!confirm('Tüm tasarım ayarları sıfırlansın mı?')) return;
+            const d = await fetch('/api/dashboard_theme', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({reset: true})
+            }).then(r => r.json());
+            loadTheme(d);
+        }
+
+        function applyTabVisibility() {
+            const hidden = THEME.hide_tabs || [];
+            document.querySelectorAll('.tabs .tab').forEach(t => {
+                const key = t.getAttribute('data-tab');
+                if (key && hidden.includes(key)) {
+                    t.style.display = 'none';
+                } else {
+                    t.style.display = '';
+                }
+            });
+        }
+
+        function buildPresets() {
+            const box = document.getElementById('preset-list');
+            box.innerHTML = Object.entries(PRESETS).map(([name, c]) => `
+                <button onclick="applyPreset('${name}')" style="cursor:pointer;border:2px solid ${c.accent};
+                    background:linear-gradient(135deg,${c.bg1},${c.bg2});color:#fff;padding:12px 16px;
+                    border-radius:calc(var(--radius)*0.5);font-weight:bold;min-width:90px;">
+                    ${name}
+                </button>`).join('');
+        }
+
+        function applyPreset(name) {
+            const p = PRESETS[name];
+            if (!p) return;
+            document.getElementById('th-accent').value = p.accent;
+            document.getElementById('th-accent2').value = p.accent2;
+            document.getElementById('th-bg1').value = p.bg1;
+            document.getElementById('th-bg2').value = p.bg2;
+            liveTheme();
+        }
+
+        function buildTabToggles() {
+            const tabs = [
+                ['commands','⌨️ Komutlar'], ['logs','📋 Loglar'], ['backups','💾 Yedekler'],
+                ['farm','🌾 Farm'], ['fivem','🔫 FiveM'], ['giveaways','🎉 Çekiliş'],
+                ['voice','🎤 Ses'], ['guard','🛡️ Guard']
+            ];
+            const box = document.getElementById('tab-toggles');
+            box.innerHTML = tabs.map(([k, label]) =>
+                `<label class="theme-checkbox"><input type="checkbox" value="${k}" onchange="scheduleSave()"> ${label}</label>`
+            ).join('');
+        }
+
+        let refreshHandle = null;
+        function restartRefresh() {
+            if (refreshHandle) clearInterval(refreshHandle);
+            const sec = parseInt(document.getElementById('th-interval')?.value || 30);
+            refreshHandle = setInterval(refreshData, sec * 1000);
+        }
+
+        async function loadTheme(cfg) {
+            THEME = cfg;
+            document.getElementById('th-title').value = cfg.title || '';
+            document.getElementById('th-subtitle').value = cfg.subtitle || '';
+            document.getElementById('th-accent').value = cfg.accent_color || '#00d4ff';
+            document.getElementById('th-accent2').value = cfg.accent_color_2 || '#7b2cbf';
+            document.getElementById('th-bg1').value = cfg.bg_color || '#1a1a2e';
+            document.getElementById('th-bg2').value = cfg.bg_color_2 || '#16213e';
+            document.getElementById('th-font').value = cfg.font_family || "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+            document.getElementById('th-radius').value = cfg.rounded_corners ?? 12;
+            document.getElementById('th-interval').value = cfg.refresh_interval ?? 30;
+            syncColorTexts();
+            document.getElementById('th-radius-val').textContent = cfg.rounded_corners ?? 12;
+            document.getElementById('th-int-val').textContent = cfg.refresh_interval ?? 30;
+
+            (cfg.hide_tabs || []).forEach(k => {
+                const el = document.querySelector(`#tab-toggles input[value="${k}"]`);
+                if (el) el.checked = true;
+            });
+
+            applyTheme(cfg);
+            applyTabVisibility();
+            restartRefresh();
+        }
+
+        async function loadVoiceGuilds() {
+            const sel = document.getElementById('voice-guild');
+            try {
+                const d = await fetch('/api/voice_control').then(r => r.json());
+                if (d.guilds && d.guilds.length) {
+                    sel.innerHTML = d.guilds.map(g =>
+                        `<option value="${g.id}">${g.name}</option>`).join('');
+                    await loadVoiceChannels();
+                } else {
+                    sel.innerHTML = '<option value="">Sunucu yok</option>';
+                }
+            } catch (e) {
+                sel.innerHTML = '<option value="">Yüklenemedi</option>';
+            }
+        }
+
+        async function loadVoiceChannels() {
+            const gid = document.getElementById('voice-guild').value;
+            const chSel = document.getElementById('voice-channel');
+            const cur = document.getElementById('voice-current');
+            if (!gid) return;
+
+            try {
+                const d = await fetch('/api/voice_control?guild_id=' + gid).then(r => r.json());
+                if (d.error) {
+                    chSel.innerHTML = `<option value="">${d.error}</option>`;
+                    cur.textContent = 'Durum: ' + d.error;
+                    return;
+                }
+
+                chSel.innerHTML = '<option value="">Kanal seçin</option>' +
+                    d.channels.map(c =>
+                        `<option value="${c.id}">${c.name} (${c.members} kişi)</option>`).join('');
+
+                if (d.current && d.current.channel_name) {
+                    cur.textContent = `Durum: 🟢 ${d.current.channel_name} kanalında`;
+                    chSel.value = d.current.channel_id;
+                } else {
+                    cur.textContent = 'Durum: ⚪ Ses kanalında değil';
+                }
+            } catch (e) {
+                chSel.innerHTML = `<option value="">Hata: ${e.message}</option>`;
+            }
+        }
+
+        async function voiceAction(action) {
+            const gid = document.getElementById('voice-guild').value;
+            const cid = document.getElementById('voice-channel').value;
+            const msg = document.getElementById('voice-status');
+
+            if (!gid) { msg.style.color = '#f44336'; msg.textContent = '❌ Sunucu seçin'; return; }
+            if (action === 'join' && !cid) { msg.style.color = '#f44336'; msg.textContent = '❌ Kanal seçin'; return; }
+
+            msg.style.color = '#888';
+            msg.textContent = 'İşleniyor...';
+
+            try {
+                const res = await fetch('/api/voice_control', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action, guild_id: gid, channel_id: cid || null})
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    msg.style.color = '#4caf50';
+                    msg.textContent = '✅ ' + data.message;
+                } else {
+                    msg.style.color = '#f44336';
+                    msg.textContent = '❌ ' + (data.error || 'Bilinmeyen hata');
+                }
+                await loadVoiceChannels();
+            } catch (e) {
+                msg.style.color = '#f44336';
+                msg.textContent = '❌ ' + e;
+            }
+        }
+
+        async function uploadBotFiles() {
+            const av = document.getElementById('avatar-file').files[0];
+            const bn = document.getElementById('banner-file').files[0];
+            const msg = document.getElementById('upload-status');
+
+            if (!av && !bn) {
+                msg.style.color = '#f44336';
+                msg.textContent = '❌ En az bir dosya seçin';
+                return;
+            }
+
+            const fd = new FormData();
+            if (av) fd.append('avatar', av);
+            if (bn) fd.append('banner', bn);
+
+            msg.style.color = '#888';
+            msg.textContent = 'Yükleniyor...';
+
+            try {
+                const res = await fetch('/api/bot_profile_upload', {method: 'POST', body: fd});
+                const data = await res.json();
+                if (res.ok) {
+                    msg.style.color = '#4caf50';
+                    msg.textContent = '✅ Yüklendi: ' + (data.changed || []).join(', ');
+                    loadBotProfile();
+                } else {
+                    msg.style.color = '#f44336';
+                    msg.textContent = '❌ ' + (data.error || 'Bilinmeyen hata');
+                }
+            } catch (e) {
+                msg.style.color = '#f44336';
+                msg.textContent = '❌ ' + e;
+            }
+        }
+
+        async function uploadActivityImage(kind) {
+            const input = document.getElementById(kind + '-image-file');
+            const file = input.files[0];
+            const msg = document.getElementById(kind + '-msg');
+
+            if (!file) {
+                msg.style.color = '#f44336';
+                msg.textContent = '❌ Dosya seçin';
+                return;
+            }
+
+            const fd = new FormData();
+            fd.append('image', file);
+            fd.append('kind', kind === 'large' ? 'large' : 'small');
+
+            msg.style.color = '#888';
+            msg.textContent = 'Yükleniyor...';
+
+            try {
+                const res = await fetch('/api/activity_image', {method: 'POST', body: fd});
+                const data = await res.json();
+                if (res.ok) {
+                    msg.style.color = '#e67e22';
+                    msg.textContent = '⚠️ ' + data.note;
+                    const wrap = document.getElementById(kind + '-preview-wrap');
+                    const img = document.getElementById(kind + '-preview');
+                    if (img) {
+                        img.src = data.data_url;
+                        wrap.style.display = 'block';
+                    }
+                } else {
+                    msg.style.color = '#f44336';
+                    msg.textContent = '❌ ' + (data.error || 'Bilinmeyen hata');
+                }
+            } catch (e) {
+                msg.style.color = '#f44336';
+                msg.textContent = '❌ ' + e;
+            }
+        }
+
         async function loadBotSettings() {
             try {
                 const s = await fetch('/api/bot_settings').then(r => r.json());
@@ -873,9 +1359,36 @@
             }
         }
 
-        // Auto refresh every 30 seconds
-        setInterval(refreshData, 30000);
-        refreshData();
+        // ==================== BASLAT ====================
+        async function initDashboard() {
+            buildPresets();
+            buildTabToggles();
+
+            try {
+                const cfg = await fetch('/api/dashboard_theme').then(r => r.json());
+                loadTheme(cfg);
+            } catch (e) {
+                console.error('Tema yuklenemedi:', e);
+                document.getElementById('th-accent').value = '#00d4ff';
+                document.getElementById('th-accent2').value = '#7b2cbf';
+                document.getElementById('th-bg1').value = '#1a1a2e';
+                document.getElementById('th-bg2').value = '#16213e';
+                syncColorTexts();
+            }
+
+            await loadBotSettings();
+            await loadBotProfile();
+            loadVoiceGuilds();
+            await refreshData();
+            restartRefresh();
+        }
+
+        // Sayfa yuklendiginde baslat
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initDashboard);
+        } else {
+            initDashboard();
+        }
     </script>
 </body>
 </html>

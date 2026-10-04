@@ -108,6 +108,7 @@ class Guard(commands.Cog):
             'message': 'mesaj-log',
             'voice': 'ses-log',
             'member': 'üye-log',
+            'rol': 'rol-log',
             'silah_katlanan': 'katlanan-silah',
             'silah_kaybedilen': 'kaybedilen-silah',
             'farm': 'farm-log',
@@ -171,6 +172,7 @@ class Guard(commands.Cog):
         app_commands.Choice(name='Mesaj - Mesaj silme/düzenleme', value='message'),
         app_commands.Choice(name='Ses - Ses kanalı logları', value='voice'),
         app_commands.Choice(name='Üye - Üye katılma/ayrılma', value='member'),
+        app_commands.Choice(name='Rol - Rol değişiklikleri', value='rol'),
         app_commands.Choice(name='Tümü - Tüm loglar', value='all')
     ])
     @app_commands.checks.has_permissions(administrator=True)
@@ -205,7 +207,7 @@ class Guard(commands.Cog):
         """Tüm log kanallarını otomatik oluştur"""
         await interaction.response.defer(ephemeral=True)
 
-        log_types = ['guard', 'mod', 'message', 'voice', 'member',
+        log_types = ['guard', 'mod', 'message', 'voice', 'member', 'rol',
                      'silah_katlanan', 'silah_kaybedilen', 'farm']
 
         progress = discord.Embed(

@@ -99,7 +99,8 @@ class Database:
                 mute_role_id INTEGER,
                 autorole_id INTEGER,
                 levelup_channel_id INTEGER,
-                levelup_message TEXT
+                levelup_message TEXT,
+                rol_log_channel_id INTEGER
             )
         ''')
 
@@ -248,6 +249,7 @@ class Database:
             'message_log_channel_id',
             'voice_log_channel_id',
             'member_log_channel_id',
+            'rol_log_channel_id',
             'silah_katlanan_log_channel_id',
             'silah_kaybedilen_log_channel_id',
             'farm_log_channel_id',

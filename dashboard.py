@@ -562,6 +562,205 @@ def api_bot_profile():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/voice_control', methods=['GET', 'POST'])
+def api_voice_control():
+    """Bot ses kontrolu: kanallari listele, katil, ayril"""
+    bot = app.config.get('BOT')
+    if not bot or not bot.is_ready():
+        return jsonify({'error': 'Bot henuz hazir degil'}), 503
+
+    # GET - kanallari ve durumu listele
+    if request.method == 'GET':
+        guild_id = request.args.get('guild_id')
+        if not guild_id:
+            guilds = [{'id': g.id, 'name': g.name} for g in bot.guilds]
+            return jsonify({'guilds': guilds})
+
+        guild = bot.get_guild(int(guild_id))
+        if not guild:
+            return jsonify({'error': 'Sunucu bulunamadi'}), 404
+
+        channels = [
+            {
+                'id': ch.id,
+                'name': ch.name,
+                'members': len(ch.members),
+                'user_limit': ch.user_limit or 0
+            }
+            for ch in guild.voice_channels
+        ]
+
+        current = None
+        for vc in bot.voice_clients:
+            if vc.guild.id == guild.id:
+                current = {
+                    'channel_id': vc.channel.id if vc.channel else None,
+                    'channel_name': vc.channel.name if vc.channel else None
+                }
+                break
+
+        return jsonify({
+            'channels': channels,
+            'current': current,
+            'guild_name': guild.name
+        })
+
+    # POST - katil / ayril / tasin
+    data = request.json or {}
+    action = data.get('action')
+    guild_id = data.get('guild_id')
+    channel_id = data.get('channel_id')
+
+    guild = bot.get_guild(int(guild_id)) if guild_id else None
+    if not guild:
+        return jsonify({'error': 'Sunucu bulunamadi'}), 404
+
+    async def do_action():
+        # Mevcut baglantiyi bul
+        vc = None
+        for c in bot.voice_clients:
+            if c.guild.id == guild.id:
+                vc = c
+                break
+
+        if action == 'leave':
+            if vc:
+                await vc.disconnect(force=True)
+                return True, 'Ses kanalindan ayrildi'
+            return False, 'Bot zaten ses kanalinda degil'
+
+        if action == 'join' or action == 'move':
+            if not channel_id:
+                return False, 'Kanal secilmedi'
+
+            channel = guild.get_channel(int(channel_id))
+            if not channel:
+                return False, 'Kanal bulunamadi'
+
+            if vc:
+                await vc.move_to(channel)
+                return True, f'{channel.name} kanalina tasindi'
+
+            await channel.connect()
+            return True, f'{channel.name} kanalina baglandi'
+
+        return False, 'Bilinmeyen islem'
+
+    try:
+        ok, msg = run_async(do_action(), timeout=25)
+        if ok:
+            print(f"[dashboard] Ses: {msg}", flush=True)
+            return jsonify({'success': True, 'message': msg})
+        return jsonify({'error': msg}), 400
+    except Exception as e:
+        return jsonify({'error': f'{type(e).__name__}: {e}'}), 500
+
+
+@app.route('/api/bot_profile_upload', methods=['POST'])
+def api_bot_profile_upload():
+    """Bot avatar / banner dosya yukleme"""
+    bot = app.config.get('BOT')
+    if not bot or not bot.user:
+        return jsonify({'error': 'Bot not available'}), 500
+
+    avatar_file = request.files.get('avatar')
+    banner_file = request.files.get('banner')
+
+    if not avatar_file and not banner_file:
+        return jsonify({'error': 'Avatar veya banner dosyasi seciniz'}), 400
+
+    MAX_SIZE = 8 * 1024 * 1024
+    ALLOWED_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
+
+    def read_image(fileobj, label):
+        if not fileobj or not fileobj.filename:
+            return None, None
+
+        ext = os.path.splitext(fileobj.filename)[1].lower()
+        if ext not in ALLOWED_EXT:
+            return None, f'{label}: Format desteklenmiyor ({ext or "belirsiz"}). PNG, JPG, GIF, WebP kullanin'
+
+        data = fileobj.read()
+        if len(data) > MAX_SIZE:
+            return None, f'{label}: Dosya 8 MB dan buyuk'
+        if len(data) < 100:
+            return None, f'{label}: Dosya bos veya gecersiz'
+        return data, None
+
+    avatar_bytes, err = read_image(avatar_file, 'avatar')
+    if err:
+        return jsonify({'error': err}), 400
+
+    banner_bytes, err = read_image(banner_file, 'banner')
+    if err:
+        return jsonify({'error': err}), 400
+
+    async def apply_upload():
+        kwargs = {}
+        if avatar_bytes:
+            kwargs['avatar'] = avatar_bytes
+        if banner_bytes:
+            kwargs['banner'] = banner_bytes
+        try:
+            await bot.user.edit(**kwargs)
+            return True, list(kwargs.keys())
+        except discord.Forbidden:
+            return False, ['Discord bu degisiklige izin vermedi']
+        except discord.HTTPException as e:
+            return False, [f'Discord reddetti (HTTP {e.status}): {e.text}']
+
+    try:
+        ok, result = run_async(apply_upload(), timeout=25)
+        if ok:
+            print(f"[dashboard] Dosya yuklendi: {result}", flush=True)
+            return jsonify({'success': True, 'changed': result})
+        return jsonify({'error': ' | '.join(result)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/activity_image', methods=['POST'])
+def api_activity_image():
+    """Oyun durumu gorseli dosya yukleme (Rich Presence icin)"""
+    if not app.config.get('BOT'):
+        return jsonify({'error': 'Bot not available'}), 500
+
+    kind = request.form.get('kind', 'large')
+    fileobj = request.files.get('image')
+
+    if not fileobj or not fileobj.filename:
+        return jsonify({'error': 'Resim dosyasi seciniz'}), 400
+
+    if kind not in ('large', 'small'):
+        return jsonify({'error': 'Gecersiz tur'}), 400
+
+    ext = os.path.splitext(fileobj.filename)[1].lower()
+    if ext not in {'.png', '.jpg', '.jpeg', '.gif', '.webp'}:
+        return jsonify({'error': f'Format desteklenmiyor: {ext}'}), 400
+
+    data = fileobj.read()
+    if len(data) > 2 * 1024 * 1024:
+        return jsonify({'error': 'Dosya 2 MB dan buyuk'}), 400
+
+    os.makedirs('activity_images', exist_ok=True)
+    safe_name = f'activity_images/{kind}.png'
+    with open(safe_name, 'wb') as f:
+        f.write(data)
+
+    import base64
+    b64 = base64.b64encode(data).decode()
+
+    return jsonify({
+        'success': True,
+        'file': safe_name,
+        'size': len(data),
+        'data_url': f'data:image/png;base64,{b64}',
+        'note': 'Discord Rich Presence gorselleri API ile yuklenemez. '
+                'Bu dosya onizleme icin saklandi - gercek gorsel icin Developer Portal > '
+                'Rich Presence > Art Assets bolumune yukleyip Asset ID kullanin.'
+    })
+
+
 @app.route('/api/dashboard_theme', methods=['GET', 'POST'])
 def api_dashboard_theme():
     """Dashboard tema/ozellestirme ayarlari"""
