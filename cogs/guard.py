@@ -15,9 +15,21 @@ class Guard(commands.Cog):
         self.action_log = {}
 
     async def get_log_channel(self, guild_id: int):
+        """Guard loglari icin ozel kanal, yoksa genel log kanalina duser"""
         settings = await self.bot.db.get_settings(guild_id)
-        if settings and settings.get('log_channel_id'):
-            return self.bot.get_channel(settings['log_channel_id'])
+        if not settings:
+            return None
+
+        guard_cid = settings.get('guard_log_channel_id')
+        if guard_cid:
+            channel = self.bot.get_channel(guard_cid)
+            if channel:
+                return channel
+
+        legacy = settings.get('log_channel_id')
+        if legacy:
+            return self.bot.get_channel(legacy)
+
         return None
 
     async def log_action(self, guild_id: int, action: str, target: str, moderator: str, reason: str):

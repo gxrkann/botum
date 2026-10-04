@@ -7,10 +7,22 @@ class FiveM(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    async def get_log_channel(self, guild_id: int):
+    async def get_log_channel(self, guild_id: int, log_type='silah_katlanan'):
+        """Silah loglari icin ozel kanali kullan (katlanan / kaybedilen)"""
         settings = await self.bot.db.get_settings(guild_id)
-        if settings and settings.get('log_channel_id'):
-            return self.bot.get_channel(settings['log_channel_id'])
+        if not settings:
+            return None
+
+        cid = settings.get(f'{log_type}_log_channel_id')
+        if cid:
+            channel = self.bot.get_channel(cid)
+            if channel:
+                return channel
+
+        legacy = settings.get('log_channel_id')
+        if legacy:
+            return self.bot.get_channel(legacy)
+
         return None
 
     @app_commands.command(name='silah', description='Silah sistemi')
@@ -65,7 +77,7 @@ class FiveM(commands.Cog):
         )
         await self.bot.db.connection.commit()
 
-        log_channel = await self.get_log_channel(interaction.guild.id)
+        log_channel = await self.get_log_channel(interaction.guild.id, 'silah_katlanan')
         if log_channel:
             embed = discord.Embed(
                 title="🔫 Silah Katlanandı",
@@ -100,7 +112,7 @@ class FiveM(commands.Cog):
         )
         await self.bot.db.connection.commit()
 
-        log_channel = await self.get_log_channel(interaction.guild.id)
+        log_channel = await self.get_log_channel(interaction.guild.id, 'silah_kaybedilen')
         if log_channel:
             embed = discord.Embed(
                 title="🔫 Silah Kaybedildi",

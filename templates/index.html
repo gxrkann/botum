@@ -548,6 +548,42 @@
             </div>
 
             <div class="section">
+                <h2>Bot Görselleri</h2>
+
+                <div style="display: flex; gap: 30px; margin-bottom: 20px; flex-wrap: wrap;">
+                    <div style="text-align: center;">
+                        <label style="display: block; margin-bottom: 8px; color: #888;">Profil Resmi</label>
+                        <img id="avatar-preview" src="" alt="avatar"
+                             style="width: 120px; height: 120px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.1);">
+                    </div>
+                    <div style="text-align: center;">
+                        <label style="display: block; margin-bottom: 8px; color: #888;">Banner</label>
+                        <img id="banner-preview" src="" alt="banner"
+                             style="width: 300px; height: 100px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.1); object-fit: cover;">
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; color: #888;">Profil Resmi URL</label>
+                    <input type="text" id="avatar-url" placeholder="https://cdn.discordapp.com/avatars/.../avatar.png"
+                           style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #fff;">
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 5px; color: #888;">Banner URL</label>
+                    <input type="text" id="banner-url" placeholder="https://cdn.discordapp.com/banners/.../banner.png"
+                           style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #fff;">
+                </div>
+
+                <button class="refresh-btn" onclick="updateBotProfile()">🖼️ Görselleri Güncelle</button>
+                <div id="profile-status" style="margin-top: 10px; color: #4caf50;"></div>
+
+                <small style="color: #666; display: block; margin-top: 12px;">
+                    Banner için bot'un sunucuda <b>Yönetici (Administrator)</b> yetkisi olması ve 2 sunucuda olması gerekir.
+                </small>
+            </div>
+
+            <div class="section">
                 <h2>Botu Sunucuya Ekle</h2>
                 <div id="bot-invite">
                     <p style="color: #888;">Yükleniyor...</p>
@@ -682,6 +718,7 @@
 
                 // Bot ayarlarini forma yukle
                 await loadBotSettings();
+                await loadBotProfile();
 
                 document.getElementById('last-update').textContent = new Date().toLocaleString('tr-TR');
             } catch (e) {
@@ -709,6 +746,51 @@
             } catch (e) {
                 msg.style.color = '#f44336';
                 msg.textContent = '❌ Hata: ' + e;
+            }
+        }
+
+        async function updateBotProfile() {
+            const payload = {
+                avatar: document.getElementById('avatar-url').value.trim(),
+                banner: document.getElementById('banner-url').value.trim()
+            };
+            const msg = document.getElementById('profile-status');
+            msg.style.color = '#888';
+            msg.textContent = 'Yükleniyor...';
+
+            try {
+                const res = await fetch('/api/bot_profile', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    msg.style.color = '#4caf50';
+                    msg.textContent = '✅ Güncellendi: ' + (data.changed || []).join(', ');
+                    loadBotProfile();
+                } else {
+                    msg.style.color = '#f44336';
+                    msg.textContent = '❌ ' + (data.error || 'Bilinmeyen hata');
+                }
+            } catch (e) {
+                msg.style.color = '#f44336';
+                msg.textContent = '❌ Hata: ' + e;
+            }
+        }
+
+        async function loadBotProfile() {
+            try {
+                const p = await fetch('/api/bot_profile').then(r => r.json());
+                const av = document.getElementById('avatar-preview');
+                const bn = document.getElementById('banner-preview');
+
+                av.src = p.avatar_url || '';
+                av.style.display = p.avatar_url ? 'block' : 'none';
+                bn.src = p.banner_url || '';
+                bn.style.display = p.banner_url ? 'block' : 'none';
+            } catch (e) {
+                console.error('Profil yuklenemedi:', e);
             }
         }
 

@@ -364,20 +364,29 @@ class Database:
             (guild_id,)
         ) as cursor:
             row = await cursor.fetchone()
-            if row:
-                return {
-                    'prefix': row[1],
-                    'welcome_channel_id': row[2],
-                    'welcome_message': row[3],
-                    'leave_channel_id': row[4],
-                    'leave_message': row[5],
-                    'log_channel_id': row[6],
-                    'mute_role_id': row[7],
-                    'autorole_id': row[8],
-                    'levelup_channel_id': row[9],
-                    'levelup_message': row[10]
-                }
-            return None
+            if not row:
+                return None
+
+            # Sutun adlarini ve degerleri eslestir - yeni log kolonlari otomatik gelir
+            async with self.connection.execute('PRAGMA table_info(settings)') as pcur:
+                columns = [r[1] for r in await pcur.fetchall()]
+
+            data = {}
+            for idx, col in enumerate(columns):
+                if idx < len(row):
+                    data[col] = row[idx]
+
+            # Eski sabit anahtarlarla uyumluluk
+            data['prefix'] = data.get('prefix') or '!'
+            data['welcome_channel_id'] = data.get('welcome_channel_id')
+            data['welcome_message'] = data.get('welcome_message')
+            data['leave_channel_id'] = data.get('leave_channel_id')
+            data['leave_message'] = data.get('leave_message')
+            data['log_channel_id'] = data.get('log_channel_id')
+            data['mute_role_id'] = data.get('mute_role_id')
+            data['autorole_id'] = data.get('autorole_id')
+
+            return data
 
     async def update_setting(self, guild_id: int, key: str, value):
         await self.connection.execute(

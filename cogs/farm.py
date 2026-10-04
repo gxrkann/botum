@@ -9,9 +9,21 @@ class Farm(commands.Cog):
         self.pending_farms = {}
 
     async def get_log_channel(self, guild_id: int):
+        """Farm loglari icin ozel kanali kullan, yoksa genel log kanalina duser"""
         settings = await self.bot.db.get_settings(guild_id)
-        if settings and settings.get('log_channel_id'):
-            return self.bot.get_channel(settings['log_channel_id'])
+        if not settings:
+            return None
+
+        farm_cid = settings.get('farm_log_channel_id')
+        if farm_cid:
+            channel = self.bot.get_channel(farm_cid)
+            if channel:
+                return channel
+
+        legacy = settings.get('log_channel_id')
+        if legacy:
+            return self.bot.get_channel(legacy)
+
         return None
 
     @app_commands.command(name='farm_ekle', description='Farm ekle (onay bekler)')

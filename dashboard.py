@@ -400,6 +400,70 @@ def api_guard(guild_id):
         asyncio.run_coroutine_threadsafe(update_guard(), bot.loop)
         return jsonify({'success': True})
 
+@app.route('/api/bot_profile', methods=['GET', 'POST'])
+def api_bot_profile():
+    """Bot avatar / banner guncelle"""
+    bot = app.config.get('BOT')
+    if not bot or not bot.user:
+        return jsonify({'error': 'Bot not available'}), 500
+
+    if request.method == 'GET':
+        return jsonify({
+            'avatar_url': str(bot.user.display_avatar.url) if bot.user.display_avatar else None,
+            'banner_url': str(bot.user.banner.url) if bot.user.banner else None,
+            'name': bot.user.name
+        })
+
+    data = request.json or {}
+
+    async def apply_profile():
+        avatar_bytes = None
+        banner_bytes = None
+
+        for kind in ('avatar', 'banner'):
+            url = (data.get(kind) or '').strip()
+            if not url:
+                continue
+            try:
+                async with bot.http.session.get(url) as resp:
+                    if resp.status == 200:
+                        content = await resp.read()
+                        if len(content) > 8 * 1024 * 1024:
+                            print(f"[dashboard] {kind} cok buyuk", flush=True)
+                            continue
+                        if kind == 'avatar':
+                            avatar_bytes = content
+                        else:
+                            banner_bytes = content
+                    else:
+                        print(f"[dashboard] {kind} indirilemedi: HTTP {resp.status}", flush=True)
+            except Exception as e:
+                print(f"[dashboard] {kind} hatasi: {e}", flush=True)
+
+        kwargs = {}
+        if avatar_bytes:
+            kwargs['avatar'] = avatar_bytes
+        if banner_bytes:
+            kwargs['banner'] = banner_bytes
+
+        if kwargs:
+            await bot.user.edit(**kwargs)
+            return True, list(kwargs.keys())
+        return False, []
+
+    try:
+        ok, changed = asyncio.run_coroutine_threadsafe(
+            apply_profile(), bot.loop
+        ).result(timeout=20)
+
+        if ok:
+            print(f"[dashboard] Guncellendi: {changed}", flush=True)
+            return jsonify({'success': True, 'changed': changed})
+        return jsonify({'error': 'Gecerli URL girilmedi veya resim indirilemadi'}), 400
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/bot_invite')
 def api_bot_invite():
     """Get bot invite link"""
