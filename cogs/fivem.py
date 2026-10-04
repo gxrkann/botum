@@ -515,5 +515,293 @@ class FiveM(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
 
+# ==================== SUNUCU GIRIS TAKIBI ====================
+    @app_commands.command(name='giris', description='FiveM sunucu giriş kayıtları (hangi sunucuda, hangi ID)')
+    @app_commands.describe(
+        islem='İşlem',
+        uye='Oyuncu',
+        sunucu='Sunucu adı',
+        host='Sunucu adresi (connect endpoint)',
+        oyuncu='Oyuncunun sunucudaki ismi',
+        steam='Steam ID (örn: steam:110000112345678)',
+        license='License ID',
+        ip='IP adresi',
+        limit='Kaç kayıt listelensin'
+    )
+    @app_commands.choices(islem=[
+        app_commands.Choice(name='Kayıt Ekle - Giriş logla', value='ekle'),
+        app_commands.Choice(name='Son Girişler - Sunucu bazlı liste', value='liste'),
+        app_commands.Choice(name='Oyuncu Girişleri - Kişinin tüm sunucu geçmişi', value='oyuncu'),
+        app_commands.Choice(name='Sunucu Ekle - Sunucu tanımla', value='sunucu_ekle'),
+        app_commands.Choice(name='Sunucular - Tanımlı sunucular', value='sunucular'),
+        app_commands.Choice(name='İstatistik - Kim hangi sunucuda oynuyor', value='istatistik'),
+        app_commands.Choice(name='Temizle - Tüm kayıtları sil', value='temizle'),
+    ])
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def giris(self, interaction: discord.Interaction, islem: str,
+                    uye: discord.Member | None = None,
+                    sunucu: str | None = None,
+                    host: str | None = None,
+                    oyuncu: str | None = None,
+                    steam: str | None = None,
+                    license: str | None = None,
+                    ip: str | None = None,
+                    limit: int = 20):
+        gid = interaction.guild.id
+        lim = max(1, min(100, limit or 20))
+
+        # ---------- SUNUCU EKLE ----------
+        if islem == 'sunucu_ekle':
+            if not sunucu:
+                await interaction.response.send_message("❌ Sunucu adı gir!", ephemeral=True)
+                return
+
+            await interaction.response.defer(ephemeral=True)
+            await self.bot.db.connection.execute(
+                'INSERT INTO fivem_servers (guild_id, name, host) VALUES (?, ?, ?)',
+                (gid, sunucu, host)
+            )
+            await self.bot.db.connection.commit()
+
+            await interaction.followup.send(
+                f"✅ **{sunucu}** eklendi\n"
+                f"Adres: `{host or 'belirtilmedi'}`", ephemeral=True)
+            return
+
+        # ---------- SUNUCULAR ----------
+        if islem == 'sunucular':
+            async with self.bot.db.connection.execute(
+                '''SELECT s.name, s.host, COUNT(c.id) giris_sayisi,
+                          COUNT(DISTINCT c.user_id) oyuncu_sayisi
+                   FROM fivem_servers s
+                   LEFT JOIN fivem_connections c ON c.server_name = s.name AND c.guild_id = s.guild_id
+                   WHERE s.guild_id = ? GROUP BY s.name, s.host''',
+                (gid,)
+            ) as cur:
+                rows = await cur.fetchall()
+
+            if not rows:
+                await interaction.response.send_message(
+                    "📭 **Tanımlı sunucu yok.**\n"
+                    "Eklemek için: `/giris islem:Sunucu Ekle`", ephemeral=True)
+                return
+
+            embed = discord.Embed(title="🖥️ Tanımlı Sunucular",
+                                  color=discord.Color.blue(), timestamp=datetime.now())
+            for name, h, giris, oyuncu in rows:
+                embed.add_field(
+                    name=f"**{name}**",
+                    value=f"Adres: `{h or '—'}`\n"
+                          f"Giriş kaydı: **{giris}** • Oyuncu: **{oyuncu}**",
+                    inline=False)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # ---------- KAYIT EKLE ----------
+        if islem == 'ekle':
+            if not uye:
+                await interaction.response.send_message("❌ Oyuncu seçmelisin!", ephemeral=True)
+                return
+            if not sunucu:
+                await interaction.response.send_message("❌ Sunucu adı gir!", ephemeral=True)
+                return
+
+            await interaction.response.defer(ephemeral=True)
+
+            await self.bot.db.connection.execute(
+                '''INSERT INTO fivem_connections
+                   (guild_id, user_id, server_name, player_name, steam_id, license_id, ip)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                (gid, uye.id, sunucu, oyuncu or uye.display_name,
+                 steam, license, ip)
+            )
+            await self.bot.db.connection.commit()
+
+            embed = discord.Embed(
+                title="🎮 Sunucu Girişi Kaydedildi",
+                color=discord.Color.green(),
+                timestamp=datetime.now()
+            )
+            embed.add_field(name="Oyuncu", value=f"{uye.mention}\nSunucudaki isim: `{oyuncu or uye.display_name}`", inline=False)
+            embed.add_field(name="Sunucu", value=f"**{sunucu}**\n`{host or 'adres belirtilmedi'}`", inline=False)
+            if steam:
+                embed.add_field(name="Steam ID", value=f"`{steam}`", inline=True)
+            if license:
+                embed.add_field(name="License ID", value=f"`{license}`", inline=True)
+            if ip:
+                embed.add_field(name="IP", value=f"`{ip}`", inline=True)
+            embed.add_field(name="Discord ID", value=f"`{uye.id}`", inline=True)
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+
+        # ---------- OYUNCUNUN GECMISI ----------
+        if islem == 'oyuncu':
+            if not uye:
+                await interaction.response.send_message("❌ Oyuncu seçmelisin!", ephemeral=True)
+                return
+
+            await interaction.response.defer(ephemeral=True)
+            async with self.bot.db.connection.execute(
+                '''SELECT server_name, player_name, steam_id, license_id, ip, created_at
+                   FROM fivem_connections
+                   WHERE guild_id = ? AND user_id = ?
+                   ORDER BY id DESC LIMIT ?''',
+                (gid, uye.id, lim)
+            ) as cur:
+                rows = await cur.fetchall()
+
+            if not rows:
+                await interaction.followup.send(
+                    f"📭 {uye.mention} için **giriş kaydı yok**.\n"
+                    f"Kayıt eklemek için: `/giris islem:Kayıt Ekle`", ephemeral=True)
+                return
+
+            sunucular = {r[0] for r in rows}
+            embed = discord.Embed(
+                title=f"🎮 {uye.display_name} — Sunucu Geçmişi",
+                description=f"**{len(rows)}** kayıt • **{len(sunucular)}** farklı sunucu",
+                color=discord.Color.purple(),
+                timestamp=datetime.now()
+            )
+
+            for r in rows[:20]:
+                # Discord embed alan siniri: 25 alan / 6000 karakter
+                detay = []
+                if r[2]:
+                    detay.append(f"Steam: `{r[2]}`")
+                if r[3]:
+                    detay.append(f"License: `{r[3]}`")
+                if r[4]:
+                    detay.append(f"IP: `{r[4]}`")
+                detay_s = "\n".join(detay) or "ID yok"
+
+                embed.add_field(
+                    name=f"🖥️ {r[0]} • {r[5][:16] if r[5] else '?'}",
+                    value=f"Sunucudaki isim: `{r[1] or '—'}`\n{detay_s}",
+                    inline=False
+                )
+
+            try:
+                embed.set_thumbnail(url=uye.display_avatar.url)
+            except Exception:
+                pass
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+
+        # ---------- SON GIRISLER (SUNUCU BAZLI) ----------
+        if islem == 'liste':
+            await interaction.response.defer(ephemeral=True)
+
+            if sunucu:
+                sql = '''SELECT user_id, player_name, steam_id, license_id, ip, created_at
+                         FROM fivem_connections
+                         WHERE guild_id = ? AND server_name = ?
+                         ORDER BY id DESC LIMIT ?'''
+                params = (gid, sunucu, lim)
+                baslik = f"🖥️ {sunucu} — Son Girişler"
+            else:
+                sql = '''SELECT user_id, server_name, player_name, steam_id, ip, created_at
+                         FROM fivem_connections
+                         WHERE guild_id = ? ORDER BY id DESC LIMIT ?'''
+                params = (gid, lim)
+                baslik = "🎮 Son Sunucu Girişleri"
+
+            async with self.bot.db.connection.execute(sql, params) as cur:
+                rows = await cur.fetchall()
+
+            if not rows:
+                await interaction.followup.send("📭 **Kayıt bulunamadı.**", ephemeral=True)
+                return
+
+            embed = discord.Embed(title=baslik, color=discord.Color.blue(),
+                                  timestamp=datetime.now())
+            embed.description = f"Son **{len(rows)}** kayıt"
+
+            for r in rows[:20]:
+                uid = r[0]
+                u = interaction.guild.get_member(uid)
+                isim = f"{u.mention}" if u else f"`{uid}`"
+                sunucu_adi = r[1] if not sunucu else None
+
+                detay = []
+                if r[3]:
+                    detay.append(f"Steam: `{r[3]}`")
+                if r[4]:
+                    detay.append(f"IP: `{r[4]}`")
+                detay_s = "\n".join(detay) or "—"
+                zaman = r[5][:16] if r[5] else "?"
+
+                bas = f"**{isim}** • `{zaman}`"
+                if sunucu_adi:
+                    bas = f"**{isim}** → 🖥️ *{sunucu_adi}* • `{zaman}`"
+
+                embed.add_field(name=bas[:256], value=detay_s[:1024], inline=False)
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+
+        # ---------- ISTATISTIK ----------
+        if islem == 'istatistik':
+            await interaction.response.defer(ephemeral=True)
+            async with self.bot.db.connection.execute(
+                '''SELECT user_id, server_name, COUNT(*) n, MAX(created_at) son
+                   FROM fivem_connections WHERE guild_id = ?
+                   GROUP BY user_id, server_name
+                   ORDER BY son DESC LIMIT 40''',
+                (gid,)
+            ) as cur:
+                rows = await cur.fetchall()
+
+            if not rows:
+                await interaction.followup.send("📭 **Kayıt yok.**", ephemeral=True)
+                return
+
+            # Kisi bazli ozet
+            kisi = {}
+            for uid, sun, n, son in rows:
+                d = kisi.setdefault(uid, {'sunucu': {}, 'toplam': 0})
+                d['sunucu'][sun] = n
+                d['toplam'] += n
+                d['son'] = son
+
+            embed = discord.Embed(
+                title="📊 Kim Hangi Sunucuda Oynuyor",
+                color=discord.Color.blue(),
+                timestamp=datetime.now()
+            )
+            embed.description = f"**{len(kisi)}** oyuncu • **{len({r[1] for r in rows})}** sunucu"
+
+            for uid, d in list(kisi.items())[:15]:
+                u = interaction.guild.get_member(uid)
+                isim = u.mention if u else f"`{uid}`"
+                sunucular = "\n".join(f"• **{s}**: {n} giriş"
+                                      for s, n in sorted(d['sunucu'].items(),
+                                                         key=lambda x: -x[1])[:5])
+                embed.add_field(
+                    name=f"{isim} — {d['toplam']} giriş",
+                    value=sunucular[:1024], inline=False)
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+
+        # ---------- TEMIZLE ----------
+        if islem == 'temizle':
+            await interaction.response.defer(ephemeral=True)
+            async with self.bot.db.connection.execute(
+                'SELECT COUNT(*) FROM fivem_connections WHERE guild_id = ?', (gid,)
+            ) as cur:
+                n = (await cur.fetchone())[0]
+
+            await self.bot.db.connection.execute(
+                'DELETE FROM fivem_connections WHERE guild_id = ?', (gid,))
+            await self.bot.db.connection.commit()
+
+            await interaction.followup.send(
+                f"🗑️ **{n}** giriş kaydı silindi.", ephemeral=True)
+            return
+
+
 async def setup(bot):
     await bot.add_cog(FiveM(bot))

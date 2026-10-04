@@ -39,7 +39,7 @@ class Help(commands.Cog):
 
         # Create buttons
         view = discord.ui.View()
-        for category in ["moderation", "music", "economy", "levels", "fun", "utility"]:
+        for category in ["moderation", "music", "fivem", "ses", "utility"]:
             button = discord.ui.Button(
                 label=category.capitalize(),
                 style=discord.ButtonStyle.primary,
@@ -79,20 +79,25 @@ class Help(commands.Cog):
                 ("/nowplaying", "Şimdi çalan"),
                 ("/disconnect", "Botu ayır"),
             ],
-            "fun": [
-                ("/yazitura", "Yazı tura"),
-                ("/zar", "Zar at"),
-                ("/8ball", "8-Ball"),
-                ("/meme", "Meme"),
-                ("/avatar", "Avatar"),
-                ("/servericon", "Sunucu ikonu"),
-                ("/serverinfo", "Sunucu bilgisi"),
-                ("/userinfo", "Kullanıcı bilgisi"),
-                ("/poll", "Anket"),
-                ("/guess", "Sayı tahmin"),
-                ("/rps", "Taş kağıt makas"),
-                ("/joke", "Şaka"),
-                ("/ship", "Eşleştir"),
+            "fivem": [
+                ("/silah", "Silah sistemi (Depo, katlanan, kayıp...)"),
+                ("/giris", "Sunucu giriş kayıtları"),
+                ("/farm_ekle", "Farm ekle"),
+                ("/farm_sil", "Farm sil"),
+                ("/farm_liste", "Farm listesi"),
+                ("/farm_istatistik", "Farm istatistikleri"),
+                ("/farm_log", "Farm log kanalı"),
+            ],
+            "ses": [
+                ("/ses_ekle", "Botu kanala sessiz ekle"),
+                ("/ses_cikar", "Botu kanaldan çıkar"),
+                ("/ses", "Ses sistemi (koruma, hub)"),
+                ("/ses_sok", "Kullanıcıyı kanala davet et"),
+                ("/ses_baglanti", "Bağlantı linki oluştur"),
+                ("/toplu_ses", "Tüm ses üyelerini topla"),
+                ("/ses_liste", "Ses süreleri sıralaması"),
+                ("/ses_detay", "Üye ses detayları"),
+                ("/ses_surem", "Kendi ses süren"),
             ],
             "utility": [
                 ("/remind", "Hatırlatma"),

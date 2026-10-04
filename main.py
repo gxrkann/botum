@@ -65,7 +65,6 @@ class Bot(commands.Bot):
         cogs = [
             'cogs.moderation',
             'cogs.music',
-            'cogs.fun',
             'cogs.utility',
             'cogs.events',
             'cogs.error_handler',

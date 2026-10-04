@@ -606,7 +606,19 @@ class VoiceManager(commands.Cog):
         name = client.channel.name if client.channel else '?'
         try:
             await client.disconnect(force=True)
-            await interaction.followup.send(f"🚪 Bot **{name}** kanalından ayrıldı.", ephemeral=True)
+
+            # Muzik kuyrugu varsa temizle (eski /disconnect komutunun islevi)
+            temizlendi = ''
+            music = self.bot.get_cog('Music')
+            if music is not None:
+                gid = interaction.guild.id
+                if music.queues.get(gid):
+                    music.queues[gid] = []
+                    music.current[gid] = None
+                    temizlendi = '\n🎵 Müzik kuyruğu temizlendi'
+
+            await interaction.followup.send(
+                f"🚪 Bot **{name}** kanalından ayrıldı.{temizlendi}", ephemeral=True)
         except Exception as e:
             await interaction.followup.send(f"❌ Ayrılamadım: `{e}`", ephemeral=True)
 

@@ -104,9 +104,43 @@ class Database:
                 dm_giris_acik INTEGER DEFAULT 0,
                 dm_giris_mesaj TEXT,
                 dm_cikis_acik INTEGER DEFAULT 0,
-                dm_cikis_mesaj TEXT
+                dm_cikis_mesaj TEXT,
+                uyari_rolleri TEXT
             )
         ''')
+
+        # FiveM sunucu giris kayitlari
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS fivem_servers (
+                guild_id INTEGER NOT NULL,
+                server_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                host TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS fivem_connections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER NOT NULL,
+                server_id INTEGER,
+                user_id INTEGER,
+                server_name TEXT,
+                player_name TEXT,
+                steam_id TEXT,
+                license_id TEXT,
+                ip TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        await self.connection.execute(
+            'CREATE INDEX IF NOT EXISTS idx_fivem_conn ON fivem_connections(guild_id, id DESC)'
+        )
+        await self.connection.execute(
+            'CREATE INDEX IF NOT EXISTS idx_fivem_conn_user ON fivem_connections(guild_id, user_id)'
+        )
 
         # Guard - Wick tarzi tehdit/aksiyon takibi
         await self.connection.execute('''
@@ -310,6 +344,7 @@ class Database:
             ('dm_giris_mesaj', 'TEXT'),
             ('dm_cikis_acik', 'INTEGER DEFAULT 0'),
             ('dm_cikis_mesaj', 'TEXT'),
+            ('uyari_rolleri', 'TEXT'),
         ]
 
         try:
@@ -420,6 +455,14 @@ class Database:
         await self.connection.execute(
             'DELETE FROM warnings WHERE id = ?',
             (warning_id,)
+        )
+        await self.connection.commit()
+
+    async def clear_warnings(self, user_id: int, guild_id: int):
+        """Uyenin tum uyari gecmisini siler"""
+        await self.connection.execute(
+            'DELETE FROM warnings WHERE user_id = ? AND guild_id = ?',
+            (user_id, guild_id)
         )
         await self.connection.commit()
 

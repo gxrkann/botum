@@ -14,7 +14,7 @@ from discord import app_commands
 from discord.utils import MISSING
 
 COGS = [
-    'cogs.moderation', 'cogs.music', 'cogs.fun', 'cogs.utility',
+    'cogs.moderation', 'cogs.music', 'cogs.utility',
     'cogs.events', 'cogs.error_handler', 'cogs.help', 'cogs.farm',
     'cogs.fivem', 'cogs.giveaway', 'cogs.voice_tracker',
     'cogs.voice_manager', 'cogs.owner_protect', 'cogs.guard',

@@ -137,51 +137,267 @@ class Moderation(commands.Cog):
         embed.set_thumbnail(url=member.display_avatar.url)
         await interaction.response.send_message(embed=embed)
 
-    # ==================== WARN ====================
-    @app_commands.command(name='warn', description='Bir üyeye uyarı ver')
-    @app_commands.describe(member='Uyarılacak üye', reason='Uyarı nedeni')
-    @app_commands.checks.has_permissions(manage_messages=True)
-    async def warn(self, interaction: discord.Interaction, member: discord.Member, reason: str):
-        await self.bot.db.add_warning(member.id, interaction.guild.id, interaction.user.id, reason)
-        warnings = await self.bot.db.get_warnings(member.id, interaction.guild.id)
+    # ==================== SEVIYELI UYARI SISTEMI ====================
+    MAX_UYARI_SEVIYESI = 10
 
-        embed = discord.Embed(
-            title="⚠️ Uyarı Verildi",
-            color=discord.Color.gold(),
-            timestamp=datetime.now()
-        )
-        embed.add_field(name="Üye", value=f"{member.mention} ({member.id})", inline=False)
-        embed.add_field(name="Yetkili", value=f"{interaction.user.mention}", inline=False)
-        embed.add_field(name="Neden", value=reason, inline=False)
-        embed.add_field(name="Toplam Uyarı", value=f"{len(warnings)}", inline=False)
-        embed.set_thumbnail(url=member.display_avatar.url)
-        await interaction.response.send_message(embed=embed)
+    async def _uyari_rolleri(self, guild_id: int) -> dict:
+        """{1: role_id, 2: role_id, ...}"""
+        import json as _json
+        s = await self.bot.db.get_settings(guild_id) or {}
+        raw = s.get('uyari_rolleri')
+        if not raw:
+            return {}
+        try:
+            return {int(k): int(v) for k, v in _json.loads(raw).items()}
+        except (ValueError, TypeError, AttributeError):
+            return {}
 
-    # ==================== WARNINGS ====================
-    @app_commands.command(name='warnings', description='Bir üyenin uyarılarını gör')
-    @app_commands.describe(member='Uyarıları görüntülenecek üye')
-    @app_commands.checks.has_permissions(manage_messages=True)
-    async def warnings(self, interaction: discord.Interaction, member: discord.Member):
-        warnings = await self.bot.db.get_warnings(member.id, interaction.guild.id)
-        if not warnings:
-            await interaction.response.send_message(f"✅ {member.mention} hiç uyarı almamış!", ephemeral=True)
+    async def _uyari_rolleri_kaydet(self, guild_id: int, roller: dict):
+        import json as _json
+        await self.bot.db.update_setting(
+            guild_id, 'uyari_rolleri',
+            _json.dumps({str(k): v for k, v in roller.items()}))
+
+    @app_commands.command(name='uyari', description='Seviyeli uyarı sistemi (1x, 2x, 3x...)')
+    @app_commands.describe(
+        islem='İşlem',
+        uye='İşlem yapılacak üye',
+        seviye='Uyarı seviyesi (1-10)',
+        rol='Uyarı seviyesine atanacak rol',
+        neden='Uyarı nedeni'
+    )
+    @app_commands.choices(islem=[
+        app_commands.Choice(name='1x/2x/3x Uyarı Ver', value='ver'),
+        app_commands.Choice(name='Geçmişi Gör', value='gecmis'),
+        app_commands.Choice(name='Uyarıyı Kaldır', value='al'),
+        app_commands.Choice(name='Tüm Uyarıları Temizle', value='temizle'),
+        app_commands.Choice(name='Uyarı Rolü Ayarla', value='rol'),
+        app_commands.Choice(name='Rol Listesi', value='liste'),
+    ])
+    @app_commands.checks.has_permissions(administrator=True)
+    async def uyari(self, interaction: discord.Interaction, islem: str,
+                    uye: discord.Member | None = None,
+                    seviye: int | None = None,
+                    rol: discord.Role | None = None,
+                    neden: str | None = None):
+
+        guild_id = interaction.guild.id
+        roller = await self._uyari_rolleri(guild_id)
+        MAX = self.MAX_UYARI_SEVIYESI
+
+        # Gecmis gecmise sadece uye gerekir, roller gerekmez
+        if islem == 'gecmis' and not uye:
+            await interaction.response.send_message("❌ Üye seçmelisin!", ephemeral=True)
+            return
+
+        # ---------- ROL LISTESI ----------
+        if islem == 'liste':
+            if not roller:
+                await interaction.response.send_message(
+                    "⚠️ **Hiç uyarı rolü ayarlanmamış!**\n\n"
+                    f"Ayarlamak için: `/uyari islem:Rol Ayarla seviye:1 rol:@rol`",
+                    ephemeral=True)
+                return
+
+            embed = discord.Embed(
+                title="⚠️ Uyarı Rolleri",
+                color=discord.Color.gold(),
+                timestamp=datetime.now()
+            )
+            lines = []
+            for lvl in range(1, MAX + 1):
+                rid = roller.get(lvl)
+                if rid:
+                    r = interaction.guild.get_role(rid)
+                    lines.append(f"{lvl}x → {r.mention if r else '⚠️ Silinmiş rol'}")
+                else:
+                    lines.append(f"{lvl}x → *Ayar yok*")
+            embed.add_field(
+                value="\n".join(lines[:10]),
+                name="Seviye → Rol",
+                inline=False
+            )
+            if len(lines) > 10:
+                embed.add_field(
+                    value="\n".join(lines[10:]),
+                    name="Seviye → Rol (devam)",
+                    inline=False
+                )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # ---------- ROL AYARLA ----------
+        if islem == 'rol':
+            if not seviye or seviye < 1 or seviye > MAX:
+                await interaction.response.send_message(
+                    f"❌ Seviye **1-{MAX}** arasında olmalı!", ephemeral=True)
+                return
+            if not rol:
+                await interaction.response.send_message(
+                    "❌ Rol seçmelisin!", ephemeral=True)
+                return
+
+            # Rol sunucuda var mi?
+            gercek = interaction.guild.get_role(rol.id)
+            if not gercek:
+                await interaction.response.send_message(
+                    "❌ Bu rol artık sunucuda yok!", ephemeral=True)
+                return
+
+            roller[seviye] = rol.id
+            await self._uyari_rolleri_kaydet(guild_id, roller)
+
+            await interaction.response.send_message(
+                f"✅ **{seviye}x uyarı** → {gercek.mention}\n"
+                f"`/uyari islem:ver uye:@kişi seviye:{seviye}` ile uygulanır.",
+                ephemeral=True)
+            return
+
+        # Bundan sonrasi (ver / al / temizle) uye gerektirir
+        if not uye:
+            await interaction.response.send_message("❌ Üye seçmelisin!", ephemeral=True)
+            return
+
+        # ---------- GECMISI GOR ----------
+        if islem == 'gecmis':
+            await interaction.response.defer(ephemeral=True)
+            gecmis = await self.bot.db.get_warnings(uye.id, guild_id)
+
+            if not gecmis:
+                await interaction.followup.send(
+                    f"✅ {uye.mention} hiç uyarı almamış!", ephemeral=True)
+                return
+
+            # Hangi rol verilmis?
+            aktif_rol = None
+            for lvl, rid in sorted(roller.items(), reverse=True):
+                r = interaction.guild.get_role(rid)
+                if r and r in uye.roles:
+                    aktif_rol = f"{lvl}x — {r.mention}"
+                    break
+
+            embed = discord.Embed(
+                title=f"⚠️ {uye.display_name} Uyarı Geçmişi ({len(gecmis)})",
+                color=discord.Color.gold(),
+                timestamp=datetime.now()
+            )
+            if aktif_rol:
+                embed.add_field(name="Aktif Seviye", value=aktif_rol, inline=False)
+
+            for i, w in enumerate(gecmis[-12:][::-1], 1):
+                mod = interaction.guild.get_member(w[3])
+                mod_ment = mod.mention if mod else "Bilinmiyor"
+                embed.add_field(
+                    name=f"#{len(gecmis) - i + 1} • {w[5][:10] if w[5] else '?'}",
+                    value=f"**Neden:** {w[4]}\n**Yetkili:** {mod_ment}",
+                    inline=False
+                )
+
+            if len(gecmis) > 12:
+                embed.set_footer(text=f"İlk {len(gecmis) - 12} kayıt gizli")
+
+            try:
+                embed.set_thumbnail(url=uye.display_avatar.url)
+            except Exception:
+                pass
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+
+        # ---------- UYARI KALDIR / TEMIZLE ----------
+        if islem in ('al', 'temizle'):
+            await interaction.response.defer(ephemeral=True)
+
+            temizle = islem == 'temizle'
+            kaldirilan = []
+
+            for lvl, rid in list(roller.items()):
+                r = interaction.guild.get_role(rid)
+                if r and r in uye.roles:
+                    try:
+                        await uye.remove_roles(r, reason="Uyarı sistemi")
+                        kaldirilan.append(f"{lvl}x")
+                    except discord.Forbidden:
+                        pass
+
+            if temizle:
+                await self.bot.db.clear_warnings(uye.id, guild_id)
+
+            await interaction.followup.send(
+                f"✅ {uye.mention} için uyarılar temizlendi."
+                + (f" Silinen seviyeler: {', '.join(kaldirilan)}" if kaldirilan else "")
+                + ("\nGeçmiş kayıtlar da silindi." if temizle else ""),
+                ephemeral=True)
+            return
+
+        # ---------- UYARI VER ----------
+        if not seviye or seviye < 1 or seviye > MAX:
+            await interaction.response.send_message(
+                f"❌ Seviye **1-{MAX}** arasında olmalı!", ephemeral=True)
+            return
+
+        rol_id = roller.get(seviye)
+        if not rol_id:
+            await interaction.response.send_message(
+                f"❌ **{seviye}x** uyarı rolü ayarlanmamış!\n\n"
+                f"Ayarlamak için: `/uyari islem:Rol Ayarla seviye:{seviye} rol:@rol`",
+                ephemeral=True)
+            return
+
+        uyari_rolu = interaction.guild.get_role(rol_id)
+        if not uyari_rolu:
+            await interaction.response.send_message(
+                f"❌ **{seviye}x** rolü sunucuda bulunamadı (silinmiş olabilir)!",
+                ephemeral=True)
+            return
+
+        # Yetki sirasi kontrolu
+        if uyari_rolu >= interaction.user.top_role:
+            await interaction.response.send_message(
+                "❌ Bu rol senin rolünden yukarıda, veremem!", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        neden = neden or "Sebep belirtilmedi"
+        await self.bot.db.add_warning(uye.id, guild_id, interaction.user.id,
+                                     f"[{seviye}x] {neden}")
+        tum_warnings = await self.bot.db.get_warnings(uye.id, guild_id)
+
+        # Rolu ekle, alt seviyeleri kaldir
+        eklenen = []
+        try:
+            await uye.add_roles(uyari_rolu, reason=f"{seviye}x uyarı")
+            eklenen.append(f"{seviye}x")
+
+            for lvl, rid in roller.items():
+                if lvl >= seviye:
+                    continue
+                alt = interaction.guild.get_role(rid)
+                if alt and alt in uye.roles:
+                    await uye.remove_roles(alt, reason="Seviye güncellendi")
+        except discord.Forbidden:
+            await interaction.followup.send(
+                "❌ Rol veremedim! Bot rolü uyarı rolünden yukarıda olmalı.",
+                ephemeral=True)
             return
 
         embed = discord.Embed(
-            title=f"⚠️ {member.name} Uyarıları ({len(warnings)})",
+            title=f"⚠️ {seviye}x Uyarı Verildi",
+            description=f"**{seviye}x** uyarı rolü verildi: {uyari_rolu.mention}",
             color=discord.Color.gold(),
             timestamp=datetime.now()
         )
-        for i, warn in enumerate(warnings[:10], 1):
-            moderator = interaction.guild.get_member(warn[3])
-            mod_name = moderator.mention if moderator else "Bilinmiyor"
-            embed.add_field(
-                name=f"Uyarı #{i}",
-                value=f"**Neden:** {warn[4]}\n**Yetkili:** {mod_name}\n**Tarih:** {warn[5][:10]}",
-                inline=False
-            )
-        embed.set_thumbnail(url=member.display_avatar.url)
-        await interaction.response.send_message(embed=embed)
+        embed.add_field(name="Üye", value=f"{uye.mention} (`{uye.id}`)", inline=False)
+        embed.add_field(name="Yetkili", value=f"{interaction.user.mention}", inline=False)
+        embed.add_field(name="Neden", value=neden, inline=False)
+        embed.add_field(name="Toplam Uyarı", value=f"**{len(tum_warnings)}** kayıt", inline=False)
+        try:
+            embed.set_thumbnail(url=uye.display_avatar.url)
+        except Exception:
+            pass
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     # ==================== CLEAR ====================
     @app_commands.command(name='clear', description='Kanaldan mesaj sil (en fazla 500)')

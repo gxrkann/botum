@@ -264,18 +264,6 @@ class Music(commands.Cog):
 
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='disconnect', description='Botu ses kanaldan ayır')
-    async def disconnect(self, interaction: discord.Interaction):
-        voice_client = interaction.guild.voice_client
-        if not voice_client:
-            await interaction.response.send_message("❌ Bir ses kanalında değilim!", ephemeral=True)
-            return
-
-        await voice_client.disconnect()
-        self.queues[interaction.guild.id] = []
-        self.current[interaction.guild.id] = None
-        await interaction.response.send_message("👋 Ses kanaldan ayrıldım!")
-
     def format_duration(self, seconds: int) -> str:
         minutes, seconds = divmod(seconds, 60)
         hours, minutes = divmod(minutes, 60)
