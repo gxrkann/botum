@@ -541,17 +541,18 @@ class VoiceManager(commands.Cog):
     async def ses_ekle(self, interaction: discord.Interaction, kanal: discord.VoiceChannel):
         await interaction.response.defer(ephemeral=True)
 
-        me = interaction.guild.me
-        perms = interaction.guild.voice_state_permissions
+        perms = kanal.permissions_for(interaction.guild.me)
         if perms is not None:
             if not perms.connect:
                 await interaction.followup.send(
-                    "❌ **Bağlanma iznim yok!** Botun rolünde `Bağlan` izni kapalı.",
+                    "❌ **Bağlanma iznim yok!**\n"
+                    "Sunucu → Bot rolü → İzinler → `Bağlan` → **AÇ**",
                     ephemeral=True)
                 return
             if not perms.speak:
                 await interaction.followup.send(
-                    "❌ **Konuşma iznim yok!** Botun rolünde `Konuş` izni kapalı.",
+                    "❌ **Konuşma iznim yok!**\n"
+                    "Sunucu → Bot rolü → İzinler → `Konuş` → **AÇ**",
                     ephemeral=True)
                 return
 
