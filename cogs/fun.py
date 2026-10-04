@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import random
 import asyncio
+from datetime import datetime
 
 class Fun(commands.Cog):
     def __init__(self, bot):
@@ -64,7 +65,7 @@ class Fun(commands.Cog):
 
     @app_commands.command(name='avatar', description='Bir üyenin avatarını göster')
     @app_commands.describe(member='Avatarı gösterilecek üye')
-    async def avatar(self, interaction: discord.Interaction, member: discord.Member = None):
+    async def avatar(self, interaction: discord.Interaction, member: discord.Member | None = None):
         member = member or interaction.user
         embed = discord.Embed(
             title=f"🖼️ {member.name} Avatarı",
@@ -108,7 +109,7 @@ class Fun(commands.Cog):
 
     @app_commands.command(name='userinfo', description='Kullanıcı bilgilerini göster')
     @app_commands.describe(member='Bilgileri gösterilecek üye')
-    async def userinfo(self, interaction: discord.Interaction, member: discord.Member = None):
+    async def userinfo(self, interaction: discord.Interaction, member: discord.Member | None = None):
         member = member or interaction.user
         embed = discord.Embed(
             title=f"👤 {member.name} Bilgileri",
@@ -282,7 +283,7 @@ class Fun(commands.Cog):
 
     @app_commands.command(name='howgay', description='Gaylik yüzdesi (eğlence)')
     @app_commands.describe(member='Üye')
-    async def howgay(self, interaction: discord.Interaction, member: discord.Member = None):
+    async def howgay(self, interaction: discord.Interaction, member: discord.Member | None = None):
         member = member or interaction.user
         percentage = random.randint(0, 100)
         embed = discord.Embed(
@@ -295,7 +296,7 @@ class Fun(commands.Cog):
 
     @app_commands.command(name='simprate', description='Simp yüzdesi (eğlence)')
     @app_commands.describe(member='Üye')
-    async def simprate(self, interaction: discord.Interaction, member: discord.Member = None):
+    async def simprate(self, interaction: discord.Interaction, member: discord.Member | None = None):
         member = member or interaction.user
         percentage = random.randint(0, 100)
         embed = discord.Embed(
@@ -308,7 +309,7 @@ class Fun(commands.Cog):
 
     @app_commands.command(name='hotrate', description='Yakışıklılık yüzdesi (eğlence)')
     @app_commands.describe(member='Üye')
-    async def hotrate(self, interaction: discord.Interaction, member: discord.Member = None):
+    async def hotrate(self, interaction: discord.Interaction, member: discord.Member | None = None):
         member = member or interaction.user
         percentage = random.randint(0, 100)
         embed = discord.Embed(

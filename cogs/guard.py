@@ -162,7 +162,7 @@ class Guard(commands.Cog):
         app_commands.Choice(name='Tümü - Tüm loglar', value='all')
     ])
     @app_commands.checks.has_permissions(administrator=True)
-    async def log_kanal(self, interaction: discord.Interaction, log_type: str, channel: discord.TextChannel = None):
+    async def log_kanal(self, interaction: discord.Interaction, log_type: str, channel: discord.TextChannel | None = None):
         if channel is None:
             # Kanal olusturulunca 3 saniyeyi asabilir
             await interaction.response.defer(ephemeral=True)
@@ -235,7 +235,7 @@ class Guard(commands.Cog):
         log_channel='Log kanalı (boş bırakılırsa otomatik oluşturulur)'
     )
     @app_commands.checks.has_permissions(administrator=True)
-    async def guard_ayarla(self, interaction: discord.Interaction, korumalar: str, log_channel: discord.TextChannel = None):
+    async def guard_ayarla(self, interaction: discord.Interaction, korumalar: str, log_channel: discord.TextChannel | None = None):
         # Kanal otomatik olusturulacaksa once defer et
         if log_channel is None:
             await interaction.response.defer(ephemeral=True)

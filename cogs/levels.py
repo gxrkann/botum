@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import random
 import math
+from datetime import datetime, timedelta
 
 class Levels(commands.Cog):
     def __init__(self, bot):
@@ -23,7 +24,7 @@ class Levels(commands.Cog):
 
     @app_commands.command(name='rank', description='Seviye kartını gör')
     @app_commands.describe(member='Seviyesi görüntülenecek üye (opsiyonel)')
-    async def rank(self, interaction: discord.Interaction, member: discord.Member = None):
+    async def rank(self, interaction: discord.Interaction, member: discord.Member | None = None):
         member = member or interaction.user
         data = await self.bot.db.get_level(member.id, interaction.guild.id)
 

@@ -18,7 +18,7 @@ class Announcement(commands.Cog):
         image='Duyuru arka plan resmi (URL)'
     )
     @app_commands.checks.has_permissions(manage_messages=True)
-    async def duyuru(self, interaction: discord.Interaction, message: str, channel: discord.TextChannel = None, color: str = "altın", title: str = "📢 Duyuru", role: discord.Role = None, everyone: bool = False, image: str = None):
+    async def duyuru(self, interaction: discord.Interaction, message: str, channel: discord.TextChannel | None = None, color: str = "altın", title: str = "📢 Duyuru", role: discord.Role | None = None, everyone: bool = False, image: str = None):
         channel = channel or interaction.channel
 
         color_map = {
@@ -96,30 +96,62 @@ class Announcement(commands.Cog):
         channel='Ses kanalı (boş bırakılırsa mevcut kanal)'
     )
     @app_commands.checks.has_permissions(move_members=True)
-    async def ses_sok(self, interaction: discord.Interaction, member: discord.Member, channel: discord.VoiceChannel = None):
+    async def ses_sok(self, interaction: discord.Interaction, member: discord.Member, channel: discord.VoiceChannel | None = None):
         if not member.voice:
             await interaction.response.send_message("❌ Bu üye ses kanalında değil!", ephemeral=True)
             return
 
         target_channel = channel or member.voice.channel
 
+        # Once gercekten tasimayi dene
+        moved = False
+        try:
+            await member.move_to(target_channel)
+            moved = True
+        except discord.Forbidden:
+            pass
+        except discord.HTTPException as e:
+            print(f"[ses_sok] Tasima hatasi: {e}", flush=True)
+
+        # Davet linki olustur (her zaman)
+        invite = None
+        try:
+            invite = await target_channel.create_invite(max_age=3600, reason="Ses daveti")
+        except discord.Forbidden:
+            pass
+
+        if moved:
+            desc = f"{member.mention} üyesi **{target_channel.mention}** kanalına taşındı!"
+            color = discord.Color.green()
+        else:
+            desc = f"{member.mention} üyesine **{target_channel.mention}** daveti gönderildi.\nTaşıma yetkisi yok, davet linki gönderildi."
+            color = discord.Color.blue()
+
         embed = discord.Embed(
             title="🎤 Ses Daveti",
-            description=f"{member.mention} üyesi {target_channel.mention} kanalına davet edildi!",
-            color=discord.Color.green(),
+            description=desc,
+            color=color,
             timestamp=datetime.now()
         )
         embed.set_thumbnail(url=member.display_avatar.url)
+        if invite:
+            embed.add_field(name="Bağlantı", value=f"[Kanalda Katıl]({invite.url})", inline=False)
 
         await interaction.response.send_message(embed=embed)
 
+        # DM gonder
         try:
+            dm_desc = f"{interaction.user.mention} seni **{target_channel.mention}** kanalına davet etti!"
+            if moved:
+                dm_desc = f"{interaction.user.mention} seni **{target_channel.mention}** kanalına taşıdı!"
             dm_embed = discord.Embed(
                 title="🎤 Ses Daveti",
-                description=f"{interaction.user.mention} seni {target_channel.mention} kanalına davet etti!",
+                description=dm_desc,
                 color=discord.Color.blue(),
                 timestamp=datetime.now()
             )
+            if invite:
+                dm_embed.add_field(name="Bağlantı", value=f"[Kanalda Katıl]({invite.url})", inline=False)
             await member.send(embed=dm_embed)
         except discord.Forbidden:
             pass

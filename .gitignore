@@ -261,3 +261,7 @@ __marimo__/
 >>>>>>> 1f00cca2d1912e492673455b80834392b5c3da1b
 
 bot_config.json
+
+_validate.py
+_test_commands.py
+_fix_optional.py

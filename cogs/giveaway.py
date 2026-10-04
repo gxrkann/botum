@@ -20,7 +20,7 @@ class Giveaway(commands.Cog):
         channel='Çekiliş kanalı'
     )
     @app_commands.checks.has_permissions(manage_messages=True)
-    async def cekilis_baslat(self, interaction: discord.Interaction, prize: str, winners: int, duration: str, channel: discord.TextChannel = None):
+    async def cekilis_baslat(self, interaction: discord.Interaction, prize: str, winners: int, duration: str, channel: discord.TextChannel | None = None):
         channel = channel or interaction.channel
 
         duration_map = {'m': 60, 'h': 3600, 'd': 86400}

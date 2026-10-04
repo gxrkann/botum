@@ -31,7 +31,7 @@ class FiveM(commands.Cog):
         app_commands.Choice(name='İstatistik - Ekip istatistikleri', value='istatistik'),
         app_commands.Choice(name='Kayıp Listesi - Kaybedilen silahlar', value='kayip_liste')
     ])
-    async def silah(self, interaction: discord.Interaction, kategori: str, member: discord.Member = None, weapon: str = None, amount: int = None, reason: str = None):
+    async def silah(self, interaction: discord.Interaction, kategori: str, member: discord.Member | None = None, weapon: str = None, amount: int = None, reason: str = None):
         if kategori == "katlanan":
             await self.silah_katlanan(interaction, member, weapon, amount, reason)
         elif kategori == "kaybedilen":

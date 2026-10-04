@@ -10,7 +10,7 @@ class Economy(commands.Cog):
 
     @app_commands.command(name='balance', description='Bakiyeni gör')
     @app_commands.describe(member='Bakiyesi görüntülenecek üye (opsiyonel)')
-    async def balance(self, interaction: discord.Interaction, member: discord.Member = None):
+    async def balance(self, interaction: discord.Interaction, member: discord.Member | None = None):
         member = member or interaction.user
         await self.bot.db.create_user(member.id, interaction.guild.id)
         data = await self.bot.db.get_balance(member.id, interaction.guild.id)
