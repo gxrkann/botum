@@ -3,6 +3,7 @@ import discord
 from discord.ext import commands
 import asyncio
 import threading
+import time
 import os
 import json
 from datetime import datetime
@@ -573,12 +574,28 @@ def api_voice_control():
     if request.method == 'GET':
         guild_id = request.args.get('guild_id')
         if not guild_id:
+            # Bot yeni baglandiginda guild cache'i birkac saniye bos kalabilir.
+            # Dashboard acilir acilmez sorgu gelirse 0 sunucu donuyordu -> kisa sure bekle.
+            waited = 0.0
+            while not bot.guilds and waited < 5.0:
+                time.sleep(0.25)
+                waited += 0.25
+
             guilds = [{'id': g.id, 'name': g.name} for g in bot.guilds]
+            if not guilds:
+                return jsonify({
+                    'guilds': [],
+                    'error': 'Bot sunucuya baglanmadi - 5 saniye icinde baglanmadi'
+                }), 503
             return jsonify({'guilds': guilds})
 
-        guild = bot.get_guild(int(guild_id))
+        try:
+            guild = bot.get_guild(int(guild_id))
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Gecersiz sunucu numarasi'}), 400
+
         if not guild:
-            return jsonify({'error': 'Sunucu bulunamadi'}), 404
+            return jsonify({'error': 'Sunucu bulunamadi - bot o sunucuda degil'}), 404
 
         channels = [
             {

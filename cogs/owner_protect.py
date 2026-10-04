@@ -4,15 +4,23 @@ from discord import app_commands
 from datetime import datetime
 import json
 import os
+import time
 
 
 class OwnerProtect(commands.Cog):
     """Bot sahibinin ve sunucunun korunmasi"""
 
+    # Ayni rolu kac saniye icinde tekrar geri eklemeyi engelle.
+    # Bu olmadan bot rol geri ekleme -> on_member_update -> geri ekleme
+    # dongusu kuruluyor ve rol logu sonsuza kadar duser.
+    REVERT_COOLDOWN = 30.0
+
     def __init__(self, bot):
         self.bot = bot
         self.config_file = 'owner_protect.json'
         self.settings = self.load()
+        # (guild_id, frozenset(rol_id)) -> son geri ekleme zamani
+        self._reverted = {}
 
     def load(self):
         defaults = {
@@ -192,13 +200,40 @@ class OwnerProtect(commands.Cog):
     async def on_member_update(self, before, after):
         if after.id != self.bot.user.id:
             return
-        if before.roles != after.roles:
-            try:
-                await after.edit(roles=before.roles)
-                await self.log(after.guild, "Bot Rolü Korundu",
-                               after, after.guild.owner, blocked=True)
-            except discord.Forbidden:
-                pass
+        if not self.settings.get('enabled', True):
+            return
+
+        # Sadece GERCEKTEN kaybolan rolleri tespit et.
+        # before.roles != after.roles kontrolu yalnizca sira degisikliginde
+        # de True olur ve sonsuz dongu yaratirdi.
+        missing = [r for r in before.roles if r not in after.roles]
+        if not missing:
+            return
+
+        # Ayni roller cok yakin zamanda zaten geri eklenmisse tekrar dokunma.
+        now = time.time()
+        key = (after.guild.id, frozenset(r.id for r in missing))
+        last = self._reverted.get(key)
+        if last is not None and (now - last) < self.REVERT_COOLDOWN:
+            return
+
+        # Cooldown kayitlarini temizle
+        if len(self._reverted) > 50:
+            self._reverted = {k: v for k, v in self._reverted.items() if now - v < self.REVERT_COOLDOWN}
+
+        self._reverted[key] = now
+
+        try:
+            await after.edit(roles=missing, reason="Bot koruma: rol geri alindi")
+        except discord.Forbidden:
+            return
+        except discord.HTTPException:
+            return
+
+        try:
+            await self.log(after.guild, "Bot Rolü Korundu", after, after.guild.owner, blocked=True)
+        except Exception:
+            pass
 
 
 async def setup(bot):

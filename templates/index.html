@@ -1413,10 +1413,12 @@
                 syncColorTexts();
             }
 
-            await loadBotSettings();
-            await loadBotProfile();
-            loadVoiceGuilds();
-            await refreshData();
+            // Bu iki istek asili kalirsa ses kontrolu hic yuklenmesin diye
+            // hepsini birbirinden bagimsiz baslatiyoruz.
+            loadBotSettings().catch(e => console.error('Bot ayarlari yuklenemedi:', e));
+            loadBotProfile().catch(e => console.error('Bot profili yuklenemedi:', e));
+            loadVoiceGuilds().catch(e => console.error('Ses kanallari yuklenemedi:', e));
+            refreshData().catch(e => console.error('Veriler yenilenemedi:', e));
             restartRefresh();
         }
 

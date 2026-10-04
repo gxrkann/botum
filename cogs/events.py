@@ -2,11 +2,39 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from datetime import datetime
+import time
 
 
 class Events(commands.Cog):
+    # Ayni rol degisikligi bu sure icinde tekrar tekrar loglanmaz.
+    # Discord bir uyeye coklu rol eklendiginde her rol icin ayri
+    # MEMBER_UPDATE olayi yolluyor ve log arka arkaya yigiluyordu.
+    ROLE_DEDUP_SECONDS = 10.0
+
     def __init__(self, bot):
         self.bot = bot
+        # (member_id, frozenset(rol_id)) -> son log zamani
+        self._role_log_cache = {}
+
+    def _should_log_roles(self, member_id: int, roles) -> bool:
+        """Ayni rol degisikligi kisa sure icinde tekrar mi edildi?"""
+        if not roles:
+            return False
+        key = (member_id, frozenset(r.id for r in roles))
+        now = time.time()
+
+        last = self._role_log_cache.get(key)
+        if last is not None and (now - last) < self.ROLE_DEDUP_SECONDS:
+            return False
+
+        if len(self._role_log_cache) > 200:
+            self._role_log_cache = {
+                k: v for k, v in self._role_log_cache.items()
+                if now - v < self.ROLE_DEDUP_SECONDS
+            }
+
+        self._role_log_cache[key] = now
+        return True
 
     async def _log_channel(self, guild_id: int, log_type: str):
         """Log turunun kanalini getir. Ayarli kanal yoksa genel log kanalina duser."""
@@ -238,7 +266,7 @@ class Events(commands.Cog):
         added = set(after.roles) - set(before.roles)
         removed = set(before.roles) - set(after.roles)
 
-        if added:
+        if added and self._should_log_roles(after.id, added):
             embed = discord.Embed(
                 title="✅ Rol Eklendi",
                 description=f"{after.mention} → {', '.join(r.mention for r in added)}",
@@ -249,7 +277,7 @@ class Events(commands.Cog):
             embed.add_field(name="Eklenen Roller", value=", ".join(r.name for r in added), inline=False)
             await self._send_log(after.guild.id, 'rol', embed)
 
-        if removed:
+        if removed and self._should_log_roles(after.id, removed):
             embed = discord.Embed(
                 title="❌ Rol Kaldırıldı",
                 description=f"{after.mention} ← {', '.join(r.mention for r in removed)}",
