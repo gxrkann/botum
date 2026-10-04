@@ -8,7 +8,7 @@ class Utility(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name='remind', description='Hatırlatma oluştur')
+    @app_commands.command(name='hatirlat', description='Hatırlatma oluştur')
     @app_commands.describe(
         time='Süre (örn: 10m, 1h, 1d)',
         reminder='Hatırlatma mesajı'
@@ -37,7 +37,7 @@ class Utility(commands.Cog):
         await asyncio.sleep(seconds)
         await interaction.user.send(f"🔔 Hatırlatma: **{reminder}**")
 
-    @app_commands.command(name='timer', description='Geri sayım başlat')
+    @app_commands.command(name='geri_sayim', description='Geri sayım başlat')
     @app_commands.describe(time='Süre (örn: 10m, 1h)')
     async def timer(self, interaction: discord.Interaction, time: str):
         duration_map = {'m': 60, 'h': 3600, 'd': 86400}
@@ -74,7 +74,7 @@ class Utility(commands.Cog):
         )
         await message.edit(embed=embed)
 
-    @app_commands.command(name='ping', description='Bot gecikmesini ölç')
+    @app_commands.command(name='gecikme', description='Bot gecikmesini ölç')
     async def ping(self, interaction: discord.Interaction):
         latency = round(self.bot.latency * 1000)
         embed = discord.Embed(
@@ -85,7 +85,7 @@ class Utility(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='invite', description='Bot davet linkini al')
+    @app_commands.command(name='davet', description='Bot davet linkini al')
     async def invite(self, interaction: discord.Interaction):
         invite_url = f"https://discord.com/api/oauth2/authorize?client_id={self.bot.user.id}&permissions=8&scope=bot%20applications.commands"
         embed = discord.Embed(
@@ -96,7 +96,7 @@ class Utility(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='support', description='Destek sunucusuna katıl')
+    @app_commands.command(name='destek', description='Destek sunucusuna katıl')
     async def support(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="🆘 Destek",
@@ -106,7 +106,7 @@ class Utility(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='vote', description='Bota oy ver')
+    @app_commands.command(name='oy_ver', description='Bota oy ver')
     async def vote(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="🗳️ Bota Oy Ver",
@@ -116,7 +116,7 @@ class Utility(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='stats', description='Bot istatistiklerini göster')
+    @app_commands.command(name='istatistik', description='Bot istatistiklerini göster')
     async def stats(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="📊 Bot İstatistikleri",
@@ -131,7 +131,7 @@ class Utility(commands.Cog):
         embed.add_field(name="Komut Sayısı", value=f"{len(self.bot.tree.get_commands())}", inline=True)
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='uptime', description='Botun çalışma süresini göster')
+    @app_commands.command(name='calisma_suresi', description='Botun çalışma süresini göster')
     async def uptime(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="⏱️ Uptime",
@@ -141,7 +141,7 @@ class Utility(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='weather', description='Hava durumu bilgisi')
+    @app_commands.command(name='hava_durumu', description='Hava durumu bilgisi')
     @app_commands.describe(city='Şehir adı')
     async def weather(self, interaction: discord.Interaction, city: str):
         # This is a placeholder - you'd need a weather API key
@@ -153,7 +153,7 @@ class Utility(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='translate', description='Metin çevir')
+    @app_commands.command(name='ceviri', description='Metin çevir')
     @app_commands.describe(
         text='Çevrilecek metin',
         from_lang='Kaynak dil (örn: tr, en)',
@@ -169,7 +169,7 @@ class Utility(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='shorten', description='URL kısalt')
+    @app_commands.command(name='link_kisit', description='URL kısalt')
     @app_commands.describe(url='Kısaltılacak URL')
     async def shorten(self, interaction: discord.Interaction, url: str):
         # This is a placeholder - you'd need a URL shortener API
@@ -181,7 +181,7 @@ class Utility(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='qr', description='QR kod oluştur')
+    @app_commands.command(name='qr_kod', description='QR kod oluştur')
     @app_commands.describe(text='QR kod içeriği')
     async def qr(self, interaction: discord.Interaction, text: str):
         qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={text}"
@@ -193,7 +193,7 @@ class Utility(commands.Cog):
         embed.set_image(url=qr_url)
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='screenshot', description='Web sitesi görüntüsü al')
+    @app_commands.command(name='ekran_goruntu', description='Web sitesi görüntüsü al')
     @app_commands.describe(url='Web sitesi URL\'si')
     async def screenshot(self, interaction: discord.Interaction, url: str):
         # This is a placeholder - you'd need a screenshot API
@@ -205,7 +205,7 @@ class Utility(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='bitcoin', description='Bitcoin fiyatı')
+    @app_commands.command(name='btc_fiyat', description='Bitcoin fiyatı')
     async def bitcoin(self, interaction: discord.Interaction):
         # This is a placeholder - you'd need a crypto API
         embed = discord.Embed(
@@ -216,7 +216,7 @@ class Utility(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='github', description='GitHub kullanıcı bilgileri')
+    @app_commands.command(name='github_bilgi', description='GitHub kullanıcı bilgileri')
     @app_commands.describe(username='GitHub kullanıcı adı')
     async def github(self, interaction: discord.Interaction, username: str):
         # This is a placeholder - you'd need to use GitHub API
@@ -228,7 +228,7 @@ class Utility(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='npm', description='npm paket bilgileri')
+    @app_commands.command(name='npm_bilgi', description='npm paket bilgileri')
     @app_commands.describe(package='Paket adı')
     async def npm(self, interaction: discord.Interaction, package: str):
         # This is a placeholder - you'd need to use npm API
@@ -240,7 +240,7 @@ class Utility(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='urban', description='Urban Dictionary tanımı')
+    @app_commands.command(name='sozluk', description='Urban Dictionary tanımı')
     @app_commands.describe(word='Kelime')
     async def urban(self, interaction: discord.Interaction, word: str):
         # This is a placeholder - you'd need to use Urban Dictionary API

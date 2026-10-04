@@ -7,7 +7,7 @@ class Help(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name='help', description='Yardım menüsünü göster')
+    @app_commands.command(name='yardim', description='Yardım menüsünü göster')
     @app_commands.describe(category='Kategori (opsiyonel)')
     async def help(self, interaction: discord.Interaction, category: str = None):
         if category:
@@ -53,30 +53,30 @@ class Help(commands.Cog):
     async def show_category_help(self, interaction: discord.Interaction, category: str):
         commands_list = {
             "moderation": [
-                ("/ban", "Üye yasakla"),
-                ("/kick", "Üye at"),
-                ("/mute", "Üye sustur"),
-                ("/unmute", "Susturmayı kaldır"),
+                ("/yasakla", "Üye yasakla"),
+                ("/at", "Üye at"),
+                ("/sustur", "Üye sustur"),
+                ("/susturma_kaldir", "Susturmayı kaldır"),
                 ("/warn", "Uyarı ver"),
                 ("/warnings", "Uyarıları gör"),
-                ("/clear", "Mesaj sil"),
-                ("/slowmode", "Yavaş mod"),
-                ("/lock", "Kanal kilitle"),
-                ("/unlock", "Kanal aç"),
-                ("/nick", "Takma ad değiştir"),
-                ("/role_add", "Rol ekle"),
-                ("/role_remove", "Rol kaldır"),
+                ("/temizle", "Mesaj sil"),
+                ("/yavas_mod", "Yavaş mod"),
+                ("/kilitle", "Kanal kilitle"),
+                ("/kilit_ac", "Kanal aç"),
+                ("/takma_ad", "Takma ad değiştir"),
+                ("/rol_ekle", "Rol ekle"),
+                ("/rol_kaldir", "Rol kaldır"),
             ],
             "music": [
-                ("/play", "Müzik çal"),
-                ("/skip", "Şarkı atla"),
-                ("/pause", "Duraklat"),
-                ("/resume", "Devam et"),
-                ("/stop", "Durdur"),
-                ("/queue", "Sırayı göster"),
-                ("/loop", "Tekrar modu"),
-                ("/volume", "Ses seviyesi"),
-                ("/nowplaying", "Şimdi çalan"),
+                ("/cal", "Müzik çal"),
+                ("/atla", "Şarkı atla"),
+                ("/duraklat", "Duraklat"),
+                ("/devam_et", "Devam et"),
+                ("/durdur", "Durdur"),
+                ("/sira", "Sırayı göster"),
+                ("/tekrar", "Tekrar modu"),
+                ("/ses_seviye", "Ses seviyesi"),
+                ("/suregi_cal", "Şimdi çalan"),
                 ("/disconnect", "Botu ayır"),
             ],
             "fivem": [
@@ -100,15 +100,15 @@ class Help(commands.Cog):
                 ("/ses_surem", "Kendi ses süren"),
             ],
             "utility": [
-                ("/remind", "Hatırlatma"),
-                ("/timer", "Geri sayım"),
-                ("/ping", "Gecikme"),
-                ("/invite", "Davet linki"),
-                ("/support", "Destek"),
-                ("/vote", "Oy ver"),
-                ("/stats", "İstatistik"),
-                ("/uptime", "Çalışma süresi"),
-                ("/qr", "QR kod"),
+                ("/hatirlat", "Hatırlatma"),
+                ("/geri_sayim", "Geri sayım"),
+                ("/gecikme", "Gecikme"),
+                ("/davet", "Davet linki"),
+                ("/destek", "Destek"),
+                ("/oy_ver", "Oy ver"),
+                ("/istatistik", "İstatistik"),
+                ("/calisma_suresi", "Çalışma süresi"),
+                ("/qr_kod", "QR kod"),
             ],
         }
 

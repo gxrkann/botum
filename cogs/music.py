@@ -86,7 +86,7 @@ class Music(commands.Cog):
             print(f"Music play error: {e}")
             await self.play_next(interaction)
 
-    @app_commands.command(name='play', description='Müzik çal')
+    @app_commands.command(name='cal', description='Müzik çal')
     @app_commands.describe(query='Şarkı adı veya YouTube/Spotify linki')
     async def play(self, interaction: discord.Interaction, query: str):
         await interaction.response.defer()
@@ -146,7 +146,7 @@ class Music(commands.Cog):
         except Exception as e:
             await interaction.followup.send(f"❌ Müzik bulunamadı: {e}", ephemeral=True)
 
-    @app_commands.command(name='skip', description='Şimdi çalan şarkıyı atla')
+    @app_commands.command(name='atla', description='Şimdi çalan şarkıyı atla')
     async def skip(self, interaction: discord.Interaction):
         voice_client = interaction.guild.voice_client
         if not voice_client or not voice_client.is_playing():
@@ -156,7 +156,7 @@ class Music(commands.Cog):
         voice_client.stop()
         await interaction.response.send_message("⏭️ Şarkı atlandı!")
 
-    @app_commands.command(name='pause', description='Müziği duraklat')
+    @app_commands.command(name='duraklat', description='Müziği duraklat')
     async def pause(self, interaction: discord.Interaction):
         voice_client = interaction.guild.voice_client
         if not voice_client or not voice_client.is_playing():
@@ -166,7 +166,7 @@ class Music(commands.Cog):
         voice_client.pause()
         await interaction.response.send_message("⏸️ Müzik duraklatıldı!")
 
-    @app_commands.command(name='resume', description='Müziği devam ettir')
+    @app_commands.command(name='devam_et', description='Müziği devam ettir')
     async def resume(self, interaction: discord.Interaction):
         voice_client = interaction.guild.voice_client
         if not voice_client or not voice_client.is_paused():
@@ -176,7 +176,7 @@ class Music(commands.Cog):
         voice_client.resume()
         await interaction.response.send_message("▶️ Müzik devam ediyor!")
 
-    @app_commands.command(name='stop', description='Müziği durdur ve sırayı temizle')
+    @app_commands.command(name='durdur', description='Müziği durdur ve sırayı temizle')
     async def stop(self, interaction: discord.Interaction):
         voice_client = interaction.guild.voice_client
         if not voice_client:
@@ -188,7 +188,7 @@ class Music(commands.Cog):
         voice_client.stop()
         await interaction.response.send_message("⏹️ Müzik durduruldu ve sıra temizlendi!")
 
-    @app_commands.command(name='queue', description='Çalma sırasını göster')
+    @app_commands.command(name='sira', description='Çalma sırasını göster')
     async def queue(self, interaction: discord.Interaction):
         queue = self.get_queue(interaction.guild.id)
         current = self.current.get(interaction.guild.id)
@@ -219,7 +219,7 @@ class Music(commands.Cog):
 
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='loop', description='Tekrar modunu ayarla')
+    @app_commands.command(name='tekrar', description='Tekrar modunu ayarla')
     @app_commands.describe(mode='Tekrar modu: off, one, all')
     @app_commands.choices(mode=[
         app_commands.Choice(name='Kapalı', value='off'),
@@ -231,7 +231,7 @@ class Music(commands.Cog):
         mode_names = {'off': 'Kapalı', 'one': 'Tek Şarkı', 'all': 'Tüm Sıra'}
         await interaction.response.send_message(f"🔁 Tekrar modu: **{mode_names[mode]}**")
 
-    @app_commands.command(name='volume', description='Ses seviyesini ayarla')
+    @app_commands.command(name='ses_seviye', description='Ses seviyesini ayarla')
     @app_commands.describe(volume='Ses seviyesi (0-100)')
     async def volume(self, interaction: discord.Interaction, volume: int):
         if volume < 0 or volume > 100:
@@ -245,7 +245,7 @@ class Music(commands.Cog):
 
         await interaction.response.send_message(f"🔊 Ses seviyesi: **{volume}%**")
 
-    @app_commands.command(name='nowplaying', description='Şimdi çalan şarkıyı göster')
+    @app_commands.command(name='suregi_cal', description='Şimdi çalan şarkıyı göster')
     async def nowplaying(self, interaction: discord.Interaction):
         current = self.current.get(interaction.guild.id)
         if not current:

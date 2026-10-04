@@ -9,7 +9,7 @@ class Moderation(commands.Cog):
         self.bot = bot
 
     # ==================== BAN ====================
-    @app_commands.command(name='ban', description='Bir üyeyi sunucudan yasakla')
+    @app_commands.command(name='yasakla', description='Bir üyeyi sunucudan yasakla')
     @app_commands.describe(
         member='Yasaklanacak üye',
         reason='Yasaklama nedeni',
@@ -37,7 +37,7 @@ class Moderation(commands.Cog):
             await interaction.response.send_message("❌ Bu üyeyi yasaklayamıyorum! Yetkilerimi kontrol et.", ephemeral=True)
 
     # ==================== KICK ====================
-    @app_commands.command(name='kick', description='Bir üyeyi sunucudan at')
+    @app_commands.command(name='at', description='Bir üyeyi sunucudan at')
     @app_commands.describe(member='Atılacak üye', reason='Atılma nedeni')
     @app_commands.checks.has_permissions(kick_members=True)
     async def kick(self, interaction: discord.Interaction, member: discord.Member, reason: str = "Belirtilmedi"):
@@ -61,7 +61,7 @@ class Moderation(commands.Cog):
             await interaction.response.send_message("❌ Bu üyeyi atamıyorum! Yetkilerimi kontrol et.", ephemeral=True)
 
     # ==================== MUTE ====================
-    @app_commands.command(name='mute', description='Bir üyeyi sustur')
+    @app_commands.command(name='sustur', description='Bir üyeyi sustur')
     @app_commands.describe(
         member='Susturulacak üye',
         duration='Süre (örn: 10m, 1h, 1d)',
@@ -117,7 +117,7 @@ class Moderation(commands.Cog):
             await interaction.response.send_message("❌ Bu üyeyi susturamıyorum! Yetkilerimi kontrol et.", ephemeral=True)
 
     # ==================== UNMUTE ====================
-    @app_commands.command(name='unmute', description='Bir üyenin susturmasını kaldır')
+    @app_commands.command(name='susturma_kaldir', description='Bir üyenin susturmasını kaldır')
     @app_commands.describe(member='Susturması kaldırılacak üye')
     @app_commands.checks.has_permissions(manage_roles=True)
     async def unmute(self, interaction: discord.Interaction, member: discord.Member):
@@ -400,7 +400,7 @@ class Moderation(commands.Cog):
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     # ==================== CLEAR ====================
-    @app_commands.command(name='clear', description='Kanaldan mesaj sil (en fazla 500)')
+    @app_commands.command(name='temizle', description='Kanaldan mesaj sil (en fazla 500)')
     @app_commands.describe(
         amount='Silinecek mesaj sayısı (1-500)',
         channel='Kanal (boş bırakılırsa bulunduğun kanal)',
@@ -483,7 +483,7 @@ class Moderation(commands.Cog):
             await interaction.followup.send(f"❌ Silme hatası: {e}", ephemeral=True)
 
     # ==================== SLOWMODE ====================
-    @app_commands.command(name='slowmode', description='Kanalı yavaş moda al')
+    @app_commands.command(name='yavas_mod', description='Kanalı yavaş moda al')
     @app_commands.describe(seconds='Yavaş mod süresi (saniye)', reason='Neden')
     @app_commands.checks.has_permissions(manage_channels=True)
     async def slowmode(self, interaction: discord.Interaction, seconds: int, reason: str = "Belirtilmedi"):
@@ -504,7 +504,7 @@ class Moderation(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     # ==================== LOCK ====================
-    @app_commands.command(name='lock', description='Kanalı kilitle')
+    @app_commands.command(name='kilitle', description='Kanalı kilitle')
     @app_commands.checks.has_permissions(manage_channels=True)
     async def lock(self, interaction: discord.Interaction):
         await interaction.channel.set_permissions(interaction.guild.default_role, send_messages=False)
@@ -518,7 +518,7 @@ class Moderation(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     # ==================== UNLOCK ====================
-    @app_commands.command(name='unlock', description='Kanalın kilidini aç')
+    @app_commands.command(name='kilit_ac', description='Kanalın kilidini aç')
     @app_commands.checks.has_permissions(manage_channels=True)
     async def unlock(self, interaction: discord.Interaction):
         await interaction.channel.set_permissions(interaction.guild.default_role, send_messages=True)
@@ -532,7 +532,7 @@ class Moderation(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     # ==================== NICKNAME ====================
-    @app_commands.command(name='nick', description='Bir üyenin takma adını değiştir')
+    @app_commands.command(name='takma_ad', description='Bir üyenin takma adını değiştir')
     @app_commands.describe(member='Takma adı değiştirilecek üye', nickname='Yeni takma ad')
     @app_commands.checks.has_permissions(manage_nicknames=True)
     async def nick(self, interaction: discord.Interaction, member: discord.Member, nickname: str):
@@ -551,7 +551,7 @@ class Moderation(commands.Cog):
             await interaction.response.send_message("❌ Bu üyenin takma adını değiştiremem! Yetkilerimi kontrol et.", ephemeral=True)
 
     # ==================== ROLE ADD ====================
-    @app_commands.command(name='role_add', description='Bir üyeye rol ekle')
+    @app_commands.command(name='rol_ekle', description='Bir üyeye rol ekle')
     @app_commands.describe(member='Rol eklenecek üye', role='Eklenecek rol')
     @app_commands.checks.has_permissions(manage_roles=True)
     async def role_add(self, interaction: discord.Interaction, member: discord.Member, role: discord.Role):
@@ -571,7 +571,7 @@ class Moderation(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     # ==================== ROLE REMOVE ====================
-    @app_commands.command(name='role_remove', description='Bir üyeden rol kaldır')
+    @app_commands.command(name='rol_kaldir', description='Bir üyeden rol kaldır')
     @app_commands.describe(member='Rol kaldırılacak üye', role='Kaldırılacak rol')
     @app_commands.checks.has_permissions(manage_roles=True)
     async def role_remove(self, interaction: discord.Interaction, member: discord.Member, role: discord.Role):

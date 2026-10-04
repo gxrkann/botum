@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 from datetime import datetime, timezone
 import asyncio
+import random
 import time
 
 
@@ -78,7 +79,7 @@ class Events(commands.Cog):
 
         embed = discord.Embed(
             title="👋 Merhaba!",
-            description="Sunucunuza eklendim! `/help` yazarak komutları görebilirsin.",
+            description="Sunucunuza eklendim! `/yardim` yazarak komutları görebilirsin.",
             color=discord.Color.blue(),
             timestamp=datetime.now()
         )
@@ -166,7 +167,7 @@ class Events(commands.Cog):
                 except discord.Forbidden:
                     pass
 
-        # Otomatik rol
+        # Otomatik rol (eski sistem)
         if settings.get('autorole_id'):
             role = member.guild.get_role(settings['autorole_id'])
             if role:
@@ -174,6 +175,218 @@ class Events(commands.Cog):
                     await member.add_roles(role)
                 except discord.Forbidden:
                     pass
+
+        # Rodeo - giren uyeye roller
+        await self._rodeo_uyele(member, settings)
+
+    async def _rodeo_uyele(self, member, settings: dict):
+        """Sunucuya giren uyeye rodeo rollerini verir"""
+        roller, mod = self._rodeo_ayarlar(settings)
+        if not roller:
+            return
+
+        guild = member.guild
+        me = guild.me
+
+        # Bot olmasin, rol siralamasi kontrolu
+        if member.id == me.id or member.bot:
+            return
+
+        verilecek = []
+        for rid in roller:
+            role = guild.get_role(rid)
+            if not role:
+                continue
+            # Botun rolunden yukseksa veremez
+            if role >= me.top_role:
+                continue
+            if role in member.roles:
+                continue
+            verilecek.append(role)
+
+        if not verilecek:
+            return
+
+        if mod == 'rastgele':
+            verilecek = [random.choice(verilecek)]
+
+        try:
+            await member.add_roles(*verilecek, reason="Rodeo: otomatik giris rolu")
+        except discord.Forbidden:
+            pass
+        except discord.HTTPException:
+            pass
+
+    # ==================== RODEO (GIRIS ROLLERI) ====================
+    def _rodeo_ayarlar(self, settings: dict):
+        """Rodeo rollerini ve modu cozer"""
+        import json as _json
+        roller = []
+        raw = settings.get('rodeo_rolleri')
+        if raw:
+            try:
+                roller = [int(x) for x in _json.loads(raw)]
+            except (ValueError, TypeError, AttributeError):
+                roller = []
+        return roller, (settings.get('rodeo_mod') or 'hepsi')
+
+    @app_commands.command(name='rodeo', description='Sunucuya girenlere otomatik rol verir')
+    @app_commands.describe(
+        islem='İşlem',
+        rol='Verilecek rol',
+        kisi='Rolü alacak üye'
+    )
+    @app_commands.choices(islem=[
+        app_commands.Choice(name='Rol Ekle - Giriş rolü olarak ekle', value='ekle'),
+        app_commands.Choice(name='Rol Kaldır - Listeden çıkar', value='kaldir'),
+        app_commands.Choice(name='Mod Seç - Tümü / Rastgele', value='mod'),
+        app_commands.Choice(name='Listele - Rodelo rolleri', value='liste'),
+        app_commands.Choice(name='Sıfırla - Tümünü kaldır', value='sifirla'),
+        app_commands.Choice(name='Üyeye Ver - Şimdi rol ver', value='ver'),
+    ])
+    @app_commands.checks.has_permissions(manage_roles=True)
+    async def rodeo(self, interaction: discord.Interaction, islem: str,
+                    rol: discord.Role | None = None,
+                    kisi: discord.Member | None = None):
+
+        guild = interaction.guild
+        gid = guild.id
+        settings = await self.bot.db.get_settings(gid) or {}
+        roller, mod = self._rodeo_ayarlar(settings)
+
+        # ---------- LISTELE ----------
+        if islem == 'liste':
+            if not roller:
+                await interaction.response.send_message(
+                    "📭 **Rodeo rolü yok.**\n\n"
+                    "Eklemek için: `/rodeo islem:Rol Ekle rol:@rol`", ephemeral=True)
+                return
+
+            lines = []
+            silinmis = 0
+            for rid in roller:
+                r = guild.get_role(rid)
+                if r:
+                    lines.append(f"• {r.mention} — üye sayısı: **{len(r.members)}**")
+                else:
+                    silinmis += 1
+
+            mod_adi = {'hepsi': 'Tüm roller verilir',
+                       'rastgele': 'Rastgele 1 rol verilir'}.get(mod, mod)
+
+            embed = discord.Embed(
+                title="🎪 Rodeo Ayarları",
+                color=discord.Color.purple(),
+                timestamp=datetime.now()
+            )
+            embed.description = "\n".join(lines[:20]) or "Rol bulunamadı"
+            embed.add_field(name="Mod", value=mod_adi, inline=False)
+            if silinmis:
+                embed.add_field(
+                    name="⚠️ Silinmiş Roller",
+                    value=f"{silinmis} rol artık yok (listeden temizlenmeli)",
+                    inline=False)
+            embed.set_footer(text="Değiştirmek için: /rodeo islem:Rol Ekle")
+
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # ---------- MOD SEC ----------
+        if islem == 'mod':
+            yeni = 'rastgele' if mod == 'hepsi' else 'hepsi'
+            await self.bot.db.update_setting(gid, 'rodeo_mod', yeni)
+            await interaction.response.send_message(
+                f"✅ Rodeo modu: **{'Rastgele 1 rol' if yeni == 'rastgele' else 'Tüm roller'}**",
+                ephemeral=True)
+            return
+
+        # ---------- SIFIRLA ----------
+        if islem == 'sifirla':
+            adet = len(roller)
+            await self.bot.db.update_setting(gid, 'rodeo_rolleri', '[]')
+            await interaction.response.send_message(
+                f"🗑️ **{adet}** rodeo rolü kaldırıldı.", ephemeral=True)
+            return
+
+        # ---------- ROL EKLE / KALDIR ----------
+        if islem in ('ekle', 'kaldir'):
+            if not rol:
+                await interaction.response.send_message(
+                    "❌ Rol seçmelisin!", ephemeral=True)
+                return
+
+            if islem == 'ekle':
+                # Bot bu rolu verebilir mi?
+                if rol >= guild.me.top_role:
+                    await interaction.response.send_message(
+                        "❌ Bu rol botun rolünden yukarıda, veremem!\n"
+                        "Botun rolünü yükselt.", ephemeral=True)
+                    return
+
+                if rol in guild.roles and guild.me.top_role <= rol:
+                    pass  # yukarida zaten kontrol edildi
+
+                if rol.id in roller:
+                    await interaction.response.send_message(
+                        f"ℹ️ {rol.mention} zaten rodeo listesinde!", ephemeral=True)
+                    return
+
+                roller.append(rol.id)
+                await interaction.response.send_message(
+                    f"✅ **{rol.mention}** rodeo listesine eklendi.\n\n"
+                    f"Artık sunucuya giren herkese verilecek.", ephemeral=True)
+            else:
+                if rol.id not in roller:
+                    await interaction.response.send_message(
+                        f"ℹ️ {rol.mention} rodeo listesinde değil!", ephemeral=True)
+                    return
+                roller.remove(rol.id)
+                await interaction.response.send_message(
+                    f"✅ **{rol.mention}** listeden çıkarıldı.", ephemeral=True)
+
+            import json as _json
+            await self.bot.db.update_setting(
+                gid, 'rodeo_rolleri', _json.dumps(roller))
+            return
+
+        # ---------- UYEYE VER ----------
+        if not kisi:
+            await interaction.response.send_message("❌ Üye seçmelisin!", ephemeral=True)
+            return
+
+        if not roller:
+            await interaction.response.send_message(
+                "📭 **Rodeo rolü yok.** `/rodeo islem:Rol Ekle` ile ekle.",
+                ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        verilecek = []
+        for rid in roller:
+            r = guild.get_role(rid)
+            if r and rid not in [x.id for x in kisi.roles]:
+                verilecek.append(r)
+
+        if not verilecek:
+            await interaction.followup.send(
+                f"ℹ️ {kisi.mention} zaten tüm rodeo rollerine sahip.", ephemeral=True)
+            return
+
+        if mod == 'rastgele':
+            verilecek = [random.choice(verilecek)]
+
+        try:
+            await kisi.add_roles(*verilecek, reason="Rodeo otomatik rol")
+        except discord.Forbidden:
+            await interaction.followup.send(
+                "❌ Rol veremedim! Botun rolü bu rollerden yukarıda olmalı.",
+                ephemeral=True)
+            return
+
+        await interaction.followup.send(
+            f"✅ {kisi.mention} → {' '.join(r.mention for r in verilecek)}",
+            ephemeral=True)
 
     @commands.Cog.listener()
     async def on_member_remove(self, member):

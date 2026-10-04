@@ -159,7 +159,7 @@ class ErrorHandler(commands.Cog):
                 await self._safe_send(
                     interaction,
                     f"❌ **Hata oluştu**\n```{type(error).__name__}: {str(error)[:300]}```\n"
-                    f"Bu komutu `/help` sayfasına bildir."
+                    f"Bu komutu `/yardim` sayfasına bildir."
                 )
 
         except Exception:

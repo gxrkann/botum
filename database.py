@@ -105,7 +105,9 @@ class Database:
                 dm_giris_mesaj TEXT,
                 dm_cikis_acik INTEGER DEFAULT 0,
                 dm_cikis_mesaj TEXT,
-                uyari_rolleri TEXT
+                uyari_rolleri TEXT,
+                rodeo_rolleri TEXT,
+                rodeo_mod TEXT
             )
         ''')
 
@@ -345,6 +347,8 @@ class Database:
             ('dm_cikis_acik', 'INTEGER DEFAULT 0'),
             ('dm_cikis_mesaj', 'TEXT'),
             ('uyari_rolleri', 'TEXT'),
+            ('rodeo_rolleri', 'TEXT'),
+            ('rodeo_mod', 'TEXT'),
         ]
 
         try:
