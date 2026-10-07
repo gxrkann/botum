@@ -372,6 +372,320 @@ def api_guild_roles():
         'total': len(guild.roles),
     })
 
+# Rollere verilebilecek izinler (Turkce etiket + discord.py anahtari)
+ROL_IZINLERI = [
+    ('GENEL', None, None),
+    ('administrator', '👑 Yönetici', 'Tüm izinler açılır'),
+    ('manage_guild', '🛠️ Sunucuyu Yönet', None),
+    ('manage_channels', '📺 Kanalları Yönet', None),
+    ('manage_roles', '🎭 Rolleri Yönet', None),
+    ('view_channel', '👁️ Kanalları Gör', None),
+    ('manage_messages', '🗑️ Mesajları Yönet', None),
+    ('manage_nicknames', '✏️ Takma Ad Yönet', None),
+    ('manage_webhooks', '🪝 Webhook Yönet', None),
+    ('moderate_members', '🔨 Üyeleri Sustur', None),
+    ('kick_members', '👢 Üyeleri At', None),
+    ('ban_members', '🔨 Üyeleri Yasakla', None),
+    ('view_audit_log', '📋 Denetim Günlüğü', None),
+    ('MESAJ', None, None),
+    ('send_messages', '💬 Mesaj Gönder', None),
+    ('send_tts', '🗣️ Mesajı Sesli Okut', None),
+    ('mention_everyone', '📢 @everyone Etiketle', None),
+    ('embed_links', '🔗 Bağlantı Gönder', None),
+    ('attach_files', '📎 Dosya Gönder', None),
+    ('add_reactions', '😀 Tepki Ver', None),
+    ('external_emojis', '😎 Özel Emoji', None),
+    ('read_message_history', '📜 Geçmişi Oku', None),
+    ('SES', None, None),
+    ('connect', '🔌 Bağlan', None),
+    ('speak', '🗣️ Konuş', None),
+    ('stream', '📺 Yayın Yap', None),
+    ('use_embedded_activities', '🎮 Uygulama Başlat', None),
+    ('mute_members', '🔇 Üyeleri Sustur', None),
+    ('deafen_members', '🔕 Kulaklığı Kapat', None),
+    ('move_members', '↔️ Üyeleri Taşı', None),
+    ('use_voice_activity', '🎙️ Ses Kullan', None),
+    ('DIGER', None, None),
+    ('create_instant_invite', '📩 Davet Oluştur', None),
+    ('change_nickname', '📛 Sunucu Takma Adı', None),
+]
+
+
+@app.route('/api/role_perms', methods=['GET', 'POST'])
+def api_role_perms():
+    """Rol izinlerini oku / yaz"""
+    bot = app.config.get('BOT')
+    if not bot:
+        return jsonify({'error': 'Bot not available'}), 500
+
+    if request.method == 'POST':
+        data = request.json or {}
+        guild_id = data.get('guild_id')
+        role_id = data.get('role_id')
+        izinler = data.get('permissions') or []
+
+        if not guild_id or not role_id:
+            return jsonify({'error': 'Sunucu veya rol secilmedi'}), 400
+
+        try:
+            guild = resolve_guild(bot, str(guild_id))
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Gecersiz sunucu numarasi'}), 400
+
+        if not guild:
+            return jsonify({'error': 'Sunucu bulunamadi'}), 404
+
+        role = guild.get_role(int(role_id))
+        if not role:
+            return jsonify({'error': 'Rol bulunamadi'}), 404
+
+        if role.is_default():
+            return jsonify({'error': '@everyone rolu duzenlenemez'}), 400
+        if role.managed:
+            return jsonify({'error': 'Bu rol bir bot/entegre rolu - duzenlenemez'}), 400
+        if role.position >= guild.me.top_role.position:
+            return jsonify({
+                'error': 'Bu rol botun rolunden yuksek - bot duzenleyemez. '
+                         'Bot rolunu yukselt.'
+            }), 400
+
+        if not guild.me.guild_permissions.administrator and not guild.me.guild_permissions.manage_roles:
+            return jsonify({'error': 'Botta Rolleri Yonete izni yok'}), 403
+
+        # Sadece izin listesindeki anahtarlari kabul et
+        gecerli = {k for k, _, _ in ROL_IZINLERI if k}
+        yeni = discord.Permissions()
+        for izin in izinler:
+            if izin in gecerli and hasattr(yeni, izin):
+                setattr(yeni, izin, True)
+
+        try:
+            async def kaydet():
+                await role.edit(permissions=yeni, reason='Dashboard')
+            run_async(kaydet())
+        except discord.Forbidden:
+            return jsonify({'error': 'Yetki yok - rol duzenlenemedi'}), 403
+        except discord.HTTPException as e:
+            return jsonify({'error': f'Discord reddetti: {e}'}), 400
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+        return jsonify({'success': True, 'count': sum(yeni)})
+
+    # GET
+    guild_id = request.args.get('guild_id')
+    role_id = request.args.get('role_id')
+
+    if not guild_id:
+        return jsonify({'error': 'Sunucu secilmedi'}), 400
+
+    try:
+        guild = resolve_guild(bot, guild_id)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Gecersiz sunucu numarasi'}), 400
+
+    if not guild:
+        return jsonify({'error': 'Sunucu bulunamadi'}), 404
+
+    if not role_id:
+        return jsonify({
+            'definitions': [
+                {'key': k, 'label': label, 'desc': desc}
+                for k, label, desc in ROL_IZINLERI
+            ]
+        })
+
+    role = guild.get_role(int(role_id))
+    if not role:
+        return jsonify({'error': 'Rol bulunamadi'}), 404
+
+    return jsonify({
+        'role_id': str(role.id),
+        'role_name': role.name,
+        'editable': not role.is_default() and not role.managed
+                     and role.position < guild.me.top_role.position,
+        'permissions': [k for k, _, _ in ROL_IZINLERI
+                        if k and getattr(role.permissions, k, False)],
+    })
+
+@app.route('/api/role_create', methods=['POST'])
+def api_role_create():
+    """Yeni rol olustur"""
+    bot = app.config.get('BOT')
+    if not bot:
+        return jsonify({'error': 'Bot not available'}), 500
+
+    data = request.json or {}
+    guild_id = data.get('guild_id')
+    ad = (data.get('name') or '').strip()
+    renk = data.get('color')
+
+    if not guild_id or not ad:
+        return jsonify({'error': 'Sunucu ve rol adi gerekli'}), 400
+    if len(ad) > 100:
+        return jsonify({'error': 'Rol adi cok uzun (max 100)'}), 400
+
+    try:
+        guild = resolve_guild(bot, str(guild_id))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Gecersiz sunucu numarasi'}), 400
+
+    if not guild:
+        return jsonify({'error': 'Sunucu bulunamadi'}), 404
+
+    if not guild.me.guild_permissions.administrator and not guild.me.guild_permissions.manage_roles:
+        return jsonify({'error': 'Botta Rolleri Yonete izni yok'}), 403
+
+    try:
+        color = discord.Color(int(renk)) if renk else discord.Color.greyple()
+    except (ValueError, TypeError):
+        color = discord.Color.greyple()
+
+    try:
+        async def olustur():
+            return await guild.create_role(name=ad, color=color, reason='Dashboard')
+        role = run_async(olustur())
+    except discord.Forbidden:
+        return jsonify({'error': 'Yetki yok - rol olusturulemedi'}), 403
+    except discord.HTTPException as e:
+        return jsonify({'error': f'Discord reddetti: {e}'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    return jsonify({
+        'success': True,
+        'role': {'id': str(role.id), 'name': role.name, 'color': str(role.color)}
+    })
+
+@app.route('/api/role_delete', methods=['POST'])
+def api_role_delete():
+    """Rol sil"""
+    bot = app.config.get('BOT')
+    if not bot:
+        return jsonify({'error': 'Bot not available'}), 500
+
+    data = request.json or {}
+    guild_id = data.get('guild_id')
+    role_id = data.get('role_id')
+
+    if not guild_id or not role_id:
+        return jsonify({'error': 'Sunucu veya rol secilmedi'}), 400
+
+    try:
+        guild = resolve_guild(bot, str(guild_id))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Gecersiz sunucu numarasi'}), 400
+
+    if not guild:
+        return jsonify({'error': 'Sunucu bulunamadi'}), 404
+
+    role = guild.get_role(int(role_id))
+    if not role:
+        return jsonify({'error': 'Rol bulunamadi'}), 404
+    if role.is_default():
+        return jsonify({'error': '@everyone silinemez'}), 400
+    if role.managed:
+        return jsonify({'error': 'Bot/entegre rolu silinemez'}), 400
+    if role.position >= guild.me.top_role.position:
+        return jsonify({'error': 'Bu rol botun rolunden yuksek - silinemez'}), 400
+
+    try:
+        async def sil():
+            await role.delete(reason='Dashboard')
+        run_async(sil())
+    except discord.Forbidden:
+        return jsonify({'error': 'Yetki yok - rol silinemedi'}), 403
+    except discord.HTTPException as e:
+        return jsonify({'error': f'Discord reddetti: {e}'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    return jsonify({'success': True})
+
+@app.route('/api/member_roles', methods=['GET', 'POST'])
+def api_member_roles():
+    """Uyenin rollerini gor / degistir"""
+    bot = app.config.get('BOT')
+    if not bot:
+        return jsonify({'error': 'Bot not available'}), 500
+
+    if request.method == 'POST':
+        data = request.json or {}
+        guild_id = data.get('guild_id')
+        user_id = data.get('user_id')
+        roller = data.get('roles') or []
+
+        if not guild_id or not user_id:
+            return jsonify({'error': 'Sunucu veya uye secilmedi'}), 400
+
+        try:
+            guild = resolve_guild(bot, str(guild_id))
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Gecersiz sunucu numarasi'}), 400
+
+        if not guild:
+            return jsonify({'error': 'Sunucu bulunamadi'}), 404
+
+        member = guild.get_member(int(user_id))
+        if not member:
+            return jsonify({'error': 'Uye bulunamadi'}), 404
+
+        # Guvenli roller: bot rolunden asagi + yonetici icermeyenler
+        guvenli = []
+        for rid in roller:
+            r = guild.get_role(int(rid))
+            if not r or r.is_default() or r.managed:
+                continue
+            if r.position >= guild.me.top_role.position:
+                continue
+            guvenli.append(r)
+
+        try:
+            async def uygula():
+                await member.edit(roles=guvenli, reason='Dashboard')
+            run_async(uygula())
+        except discord.Forbidden:
+            return jsonify({'error': 'Yetki yok - roller degistirilemedi'}), 403
+        except discord.HTTPException as e:
+            return jsonify({'error': f'Discord reddetti: {e}'}), 400
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+        return jsonify({'success': True, 'count': len(guvenli)})
+
+    # GET
+    guild_id = request.args.get('guild_id')
+    if not guild_id:
+        return jsonify({'error': 'Sunucu secilmedi'}), 400
+
+    try:
+        guild = resolve_guild(bot, guild_id)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Gecersiz sunucu numarasi'}), 400
+
+    if not guild:
+        return jsonify({'error': 'Sunucu bulunamadi'}), 404
+
+    if guild.member_count > 3000:
+        return jsonify({
+            'error': f'Sunucu cok buyuk ({guild.member_count} uye). '
+                     'Liste ilk 3000 uye ile sinirli.',
+            'members': []
+        })
+
+    uyeler = []
+    for m in guild.members[:2000]:
+        uyeler.append({
+            'id': str(m.id),
+            'name': m.display_name,
+            'avatar': str(m.display_avatar.url) if m.display_avatar else None,
+            'roles': [str(r.id) for r in m.roles if not r.is_default()],
+            'top': m.top_role.name if m.top_role else '?',
+            'bot': m.bot,
+        })
+
+    return jsonify({'members': uyeler, 'total': guild.member_count})
+
 @app.route('/api/roller', methods=['GET', 'POST'])
 def api_roller():
     """Rodeo (girise otomatik rol) ayarlari - dashboard uzerinden"""

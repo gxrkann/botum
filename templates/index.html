@@ -541,6 +541,89 @@
                     <b>Kırmızı</b> roller bot rolünden yukarıda — verilemez.
                 </p>
             </div>
+
+            <div class="section">
+                <h2>🎭 Rol İzin Yönetimi</h2>
+                <p style="color:#888;margin-bottom:15px;">
+                    Rollerin izinlerini buradan aç/kapat. Yeni rol oluştur, sil veya üyelere rol ver.
+                </p>
+
+                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:15px;">
+                    <input type="text" id="new-role-name" placeholder="Yeni rol adı"
+                           style="flex:1;min-width:200px;padding:10px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;">
+                    <input type="color" id="new-role-color" value="#3498db"
+                           style="width:52px;height:42px;padding:3px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);">
+                    <button class="refresh-btn" onclick="createRole()">➕ Rol Oluştur</button>
+                </div>
+                <div id="new-role-status" style="margin-bottom:20px;font-size:0.9em;"></div>
+
+                <!-- ROL LISTESI -->
+                <div class="theme-grid" style="margin-bottom:20px;">
+                    <div>
+                        <label style="display:block;margin-bottom:5px;color:#888;">
+                            Sunucudaki Roller
+                        </label>
+                        <select id="perm-role-select" onchange="loadRolePerms()"
+                                style="width:100%;padding:10px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;">
+                            <option value="">Rol seçin</option>
+                        </select>
+                        <small id="perm-role-info" style="color:#666;"></small>
+                    </div>
+                    <div>
+                        <label style="display:block;margin-bottom:5px;color:#888;">İşlem</label>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button class="refresh-btn" onclick="saveRolePerms()">💾 İzinleri Kaydet</button>
+                            <button class="refresh-btn" onclick="allPerms(true)"
+                                    style="background:linear-gradient(90deg,#27ae60,#1e8449);">✓ Tümü</button>
+                            <button class="refresh-btn" onclick="allPerms(false)"
+                                    style="background:linear-gradient(90deg,#c0392b,#922b21);">✕ Hiçbiri</button>
+                        </div>
+                        <div id="perm-status" style="margin-top:8px;font-size:0.9em;"></div>
+                    </div>
+                </div>
+
+                <!-- IZINLER -->
+                <div id="perm-list"
+                     style="max-height:520px;overflow-y:auto;border:1px solid var(--card-border);
+                            border-radius:calc(var(--radius)*0.5);padding:12px;">
+                    <p style="color:#888;">Önce bir rol seç</p>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>👤 Üye Rol Atama</h2>
+                <p style="color:#888;margin-bottom:15px;">
+                    Üyeye rol ver / al. Tüm rollerini değiştirir (seçmediklerin kalkar).
+                </p>
+
+                <div class="theme-grid" style="margin-bottom:12px;">
+                    <div>
+                        <label style="display:block;margin-bottom:5px;color:#888;">Üye</label>
+                        <input type="search" id="member-search" placeholder="Üye ara..."
+                               oninput="filterMembers()"
+                               style="width:100%;padding:10px;margin-bottom:8px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;">
+                        <select id="member-select" onchange="selectMember()"
+                                style="width:100%;padding:10px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;">
+                            <option value="">Yükleniyor...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block;margin-bottom:5px;color:#888;">Roller</label>
+                        <div id="member-roles"
+                             style="max-height:230px;overflow-y:auto;border:1px solid var(--card-border);
+                                    border-radius:calc(var(--radius)*0.5);padding:8px;">
+                            <p style="color:#888;padding:8px;">Önce üye seç</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <button class="refresh-btn" onclick="saveMemberRoles()">💾 Rolleri Uygula</button>
+                    <button class="refresh-btn" onclick="loadMembers()"
+                            style="background:linear-gradient(90deg,#636e72,#4a4a4a);">🔄 Üyeleri Yenile</button>
+                </div>
+                <div id="member-status" style="margin-top:10px;font-size:0.9em;"></div>
+            </div>
         </div>
 
         <div id="tab-commands" class="tab-content">
@@ -1361,6 +1444,301 @@
             restartRefresh();
         }
 
+        // ==================== ROL IZIN YONETIMI ====================
+        let IZIN_TANIMLARI = [];
+        let ROL_IZINLERI = new Set();
+        let AKTIF_ROL = null;
+        let UYE_LISTESI = [];
+        let AKTIF_UYE = null;
+        let UYE_ROLLERI = new Set();
+
+        function renderPerms() {
+            const box = document.getElementById('perm-list');
+
+            if (!AKTIF_ROL) {
+                box.innerHTML = '<p style="color:#888;">Önce bir rol seç</p>';
+                return;
+            }
+
+            let html = '';
+            let grup = '';
+
+            for (const d of IZIN_TANIMLARI) {
+                if (!d.key) {
+                    html += `<h4 style="margin:14px 0 8px;color:var(--accent);
+                                        border-bottom:1px solid var(--card-border);
+                                        padding-bottom:5px;">${d.label}</h4>`;
+                    continue;
+                }
+                const acik = ROL_IZINLERI.has(d.key);
+                html += `
+                    <label style="display:flex;align-items:flex-start;gap:10px;padding:6px 8px;
+                                   border-radius:calc(var(--radius)*0.3);cursor:pointer;">
+                        <input type="checkbox" ${acik ? 'checked' : ''}
+                               onchange="togglePerm('${d.key}', this.checked)"
+                               style="width:17px;height:17px;cursor:pointer;margin-top:2px;">
+                        <span>
+                            ${d.label}
+                            ${d.desc ? `<small style="color:#666;display:block;">${d.desc}</small>` : ''}
+                        </span>
+                    </label>`;
+            }
+
+            box.innerHTML = html;
+        }
+
+        function togglePerm(key, checked) {
+            if (checked) {
+                ROL_IZINLERI.add(key);
+                // Yonetici acilirsa digerlerini otomatik kapat
+                if (key === 'administrator') {
+                    ROL_IZINLERI.clear();
+                    ROL_IZINLERI.add('administrator');
+                }
+            } else {
+                ROL_IZINLERI.delete(key);
+            }
+            renderPerms();
+        }
+
+        function allPerms(tum) {
+            if (!AKTIF_ROL) return;
+            ROL_IZINLERI.clear();
+            if (tum) {
+                for (const d of IZIN_TANIMLARI) {
+                    if (d.key) ROL_IZINLERI.add(d.key);
+                }
+            }
+            renderPerms();
+        }
+
+        async function loadRolePerms() {
+            const gid = document.getElementById('role-guild').value;
+            const rid = document.getElementById('perm-role-select').value;
+            const info = document.getElementById('perm-role-info');
+            const st = document.getElementById('perm-status');
+
+            if (!rid) {
+                AKTIF_ROL = null;
+                ROL_IZINLERI.clear();
+                renderPerms();
+                return;
+            }
+
+            AKTIF_ROL = rid;
+            st.style.color = '#888';
+            st.textContent = 'Yükleniyor...';
+
+            try {
+                const d = await fetch(
+                    '/api/role_perms?guild_id=' + encodeURIComponent(gid) +
+                    '&role_id=' + encodeURIComponent(rid)).then(r => r.json());
+
+                if (d.error) {
+                    st.style.color = '#f44336';
+                    st.textContent = '❌ ' + d.error;
+                    info.textContent = '';
+                    return;
+                }
+
+                if (!IZIN_TANIMLARI.length) {
+                    const defs = await fetch(
+                        '/api/role_perms?guild_id=' + encodeURIComponent(gid)
+                    ).then(r => r.json());
+                    IZIN_TANIMLARI = defs.definitions || [];
+                }
+
+                ROL_IZINLERI = new Set(d.permissions || []);
+
+                info.innerHTML = d.editable
+                    ? `<span style="color:#4CAF50;">✏️ Düzenlenebilir</span>`
+                    : `<span style="color:#e74c3c;">🔒 Bu rol düzenlenemez</span>`;
+
+                st.style.color = '#888';
+                st.textContent = `${ROL_IZINLERI.size} izin açık`;
+
+                renderPerms();
+
+            } catch (e) {
+                st.style.color = '#f44336';
+                st.textContent = '❌ ' + e.message;
+            }
+        }
+
+        async function saveRolePerms() {
+            const gid = document.getElementById('role-guild').value;
+            const rid = document.getElementById('perm-role-select').value;
+            const st = document.getElementById('perm-status');
+
+            if (!rid) { st.style.color = '#f44336'; st.textContent = '❌ Rol seçin'; return; }
+
+            st.style.color = '#888';
+            st.textContent = 'Kaydediliyor...';
+
+            try {
+                const d = await fetch('/api/role_perms', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        guild_id: gid,
+                        role_id: rid,
+                        permissions: [...ROL_IZINLERI]
+                    })
+                }).then(r => r.json());
+
+                if (d.error) {
+                    st.style.color = '#f74336';
+                    st.textContent = '❌ ' + d.error;
+                } else {
+                    st.style.color = '#4CAF50';
+                    st.textContent = `✅ ${d.count} izin kaydedildi`;
+                }
+            } catch (e) {
+                st.style.color = '#f74336';
+                st.textContent = '❌ ' + e.message;
+            }
+        }
+
+        async function createRole() {
+            const gid = document.getElementById('role-guild').value;
+            const ad = document.getElementById('new-role-name').value.trim();
+            const renk = document.getElementById('new-role-color').value;
+            const st = document.getElementById('new-role-status');
+
+            if (!ad) { st.style.color = '#f44336'; st.textContent = '❌ Rol adı gir'; return; }
+
+            st.style.color = '#888';
+            st.textContent = 'Oluşturuluyor...';
+
+            try {
+                const d = await fetch('/api/role_create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ guild_id: gid, name: ad, color: renk })
+                }).then(r => r.json());
+
+                if (d.error) {
+                    st.style.color = '#f44336';
+                    st.textContent = '❌ ' + d.error;
+                } else {
+                    st.style.color = '#4CAF50';
+                    st.textContent = `✅ "${d.role.name}" oluşturuldu`;
+                    document.getElementById('new-role-name').value = '';
+                    loadRodeoRoles();
+                    loadMembers();
+                }
+            } catch (e) {
+                st.style.color = '#f74336';
+                st.textContent = '❌ ' + e.message;
+            }
+        }
+
+        async function loadMembers() {
+            const gid = document.getElementById('role-guild').value;
+            const st = document.getElementById('member-status');
+            if (!gid) return;
+
+            st.style.color = '#888';
+            st.textContent = 'Üyeler yükleniyor...';
+
+            try {
+                const d = await fetch('/api/member_roles?guild_id=' + encodeURIComponent(gid))
+                    .then(r => r.json());
+
+                UYE_LISTESI = d.members || [];
+                filterMembers();
+
+                st.style.color = '#4CAF50';
+                st.textContent = `✅ ${d.members.length} üye yüklendi` +
+                    (d.error ? ` (${d.error})` : '');
+            } catch (e) {
+                st.style.color = '#f74336';
+                st.textContent = '❌ ' + e.message;
+            }
+        }
+
+        function filterMembers() {
+            const sel = document.getElementById('member-select');
+            const ara = (document.getElementById('member-search').value || '').toLowerCase();
+            const goster = UYE_LISTESI.filter(m =>
+                !ara || m.name.toLowerCase().includes(ara)).slice(0, 300);
+
+            sel.innerHTML = goster.length
+                ? '<option value="">Üye seçin</option>' + goster.map(m =>
+                    `<option value="${m.id}">${m.name}${m.bot ? ' [BOT]' : ''} — ${m.top}</option>`
+                ).join('')
+                : '<option value="">Üye bulunamadı</option>';
+        }
+
+        function selectMember() {
+            const uid = document.getElementById('member-select').value;
+            const box = document.getElementById('member-roles');
+
+            if (!uid) {
+                box.innerHTML = '<p style="color:#888;padding:8px;">Önce üye seç</p>';
+                return;
+            }
+
+            AKTIF_UYE = UYE_LISTESI.find(m => m.id === uid);
+            if (!AKTIF_UYE) return;
+
+            UYE_ROLLERI = new Set(AKTIF_UYE.roles);
+
+            box.innerHTML = ROL_LISTESI.map(r => {
+                const secili = UYE_ROLLERI.has(r.id);
+                const renk = r.assignable ? '#3498db' : '#e74c3c';
+                return `
+                    <label style="display:flex;align-items:center;gap:8px;padding:5px 6px;
+                                   border-radius:calc(var(--radius)*0.3);cursor:pointer;
+                                   border-left:3px solid ${renk};">
+                        <input type="checkbox" ${secili ? 'checked' : ''}
+                               ${r.assignable ? '' : 'disabled'}
+                               onchange="toggleMemberRole('${r.id}', this.checked)"
+                               style="width:16px;height:16px;">
+                        <span style="flex:1;font-size:0.9em;">${r.name}</span>
+                    </label>`;
+            }).join('');
+        }
+
+        function toggleMemberRole(rid, checked) {
+            if (checked) UYE_ROLLERI.add(rid);
+            else UYE_ROLLERI.delete(rid);
+        }
+
+        async function saveMemberRoles() {
+            const gid = document.getElementById('role-guild').value;
+            const st = document.getElementById('member-status');
+
+            if (!AKTIF_UYE) { st.style.color = '#f74336'; st.textContent = '❌ Üye seçin'; return; }
+
+            st.style.color = '#888';
+            st.textContent = 'Uygulanıyor...';
+
+            try {
+                const d = await fetch('/api/member_roles', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        guild_id: gid,
+                        user_id: AKTIF_UYE.id,
+                        roles: [...UYE_ROLLERI]
+                    })
+                }).then(r => r.json());
+
+                if (d.error) {
+                    st.style.color = '#f74336';
+                    st.textContent = '❌ ' + d.error;
+                } else {
+                    st.style.color = '#4CAF50';
+                    st.textContent = `✅ ${d.count} rol verildi`;
+                    selectMember();
+                }
+            } catch (e) {
+                st.style.color = '#f44336';
+                st.textContent = '❌ ' + e.message;
+            }
+        }
+
         // ==================== RODEO / ROL YONETIMI ====================
         let ROL_LISTESI = [];
         let RODEO_SECILI = [];
@@ -1477,6 +1855,15 @@
                 setRodeoMod(ayar.mod || 'hepsi');
 
                 renderRoles();
+
+                // Izin yonetimi icin rol secim kutusunu doldur
+                const sel = document.getElementById('perm-role-select');
+                const eski = sel.value;
+                sel.innerHTML = '<option value="">Rol seçin</option>' +
+                    ROL_LISTESI.map(r =>
+                        `<option value="${r.id}">${r.name} (${r.members})</option>`
+                    ).join('');
+                if (eski) sel.value = eski;
 
                 st.style.color = '#4CAF50';
                 st.textContent = `✅ ${ROL_LISTESI.length} rol yüklendi ` +
@@ -1953,6 +2340,7 @@
             loadVoiceGuilds().catch(e => console.error('Ses kanallari yuklenemedi:', e));
             refreshData().catch(e => console.error('Veriler yenilenemedi:', e));
             initRolePanel().catch(e => console.error('Rol paneli yuklenemedi:', e));
+            loadMembers().catch(e => console.error('Uyeler yuklenemedi:', e));
             restartRefresh();
         }
 
