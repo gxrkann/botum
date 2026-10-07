@@ -202,16 +202,29 @@ class Events(commands.Cog):
             return
 
         verilecek = []
+        olu_kalan = []
+
         for rid in roller:
             role = guild.get_role(rid)
+            # Rol yoksa (silinmis) listeden de dusur
             if not role:
                 continue
-            # Botun rolunden yukseksa veremez
+            if role in member.roles:
+                olu_kalan.append(rid)
+                continue
             if role >= me.top_role:
                 continue
-            if role in member.roles:
-                continue
             verilecek.append(role)
+            olu_kalan.append(rid)
+
+        # Listede olu (silinmis) roller varsa temizle - bir daha bakmayalim
+        if len(olu_kalan) != len(roller):
+            import json as _json
+            try:
+                await self.bot.db.update_setting(
+                    guild.id, 'rodeo_rolleri', _json.dumps(olu_kalan))
+            except Exception:
+                pass
 
         if not verilecek:
             return
