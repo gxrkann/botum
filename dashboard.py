@@ -877,6 +877,161 @@ def api_etiket():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/tetik', methods=['GET', 'POST'])
+def api_tetik():
+    """Rol tetikleri: tetik rol verilince hedef otomatik verilir"""
+    bot = app.config.get('BOT')
+    if not bot:
+        return jsonify({'error': 'Bot not available'}), 500
+
+    import json as _json
+
+    if request.method == 'POST':
+        data = request.json or {}
+        guild_id = data.get('guild_id')
+        if not guild_id:
+            return jsonify({'error': 'Sunucu secilmedi'}), 400
+
+        try:
+            guild = resolve_guild(bot, str(guild_id))
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Gecersiz sunucu numarasi'}), 400
+
+        if not guild:
+            return jsonify({'error': 'Sunucu bulunamadi'}), 404
+
+        if not guild.me.guild_permissions.administrator and not guild.me.guild_permissions.manage_roles:
+            return jsonify({'error': 'Botta Rolleri Yonete izni yok'}), 403
+
+        tetik_id = data.get('tetik')
+        hedefler = data.get('hedef') or []
+
+        async def uygula():
+            settings = await bot.db.get_settings(guild.id) or {}
+            raw = settings.get('rol_tetikleri')
+            try:
+                liste = _json.loads(raw) if raw else []
+            except (ValueError, TypeError):
+                liste = []
+            if not isinstance(liste, list):
+                liste = []
+
+            # Temizle
+            if data.get('islem') == 'temizle':
+                await bot.db.update_setting(guild.id, 'rol_tetikleri', _json.dumps([]))
+                return []
+
+            # Sil
+            if data.get('islem') == 'sil':
+                yeni = [t for t in liste if int(t.get('tetik', 0)) != int(tetik_id)]
+                await bot.db.update_setting(guild.id, 'rol_tetikleri', _json.dumps(yeni))
+                return yeni
+
+            if not tetik_id:
+                return []
+
+            # Tetik rol var mi / bot izleyebilir mi
+            t_rol = guild.get_role(int(tetik_id))
+            if not t_rol:
+                return None
+            if t_rol.position >= guild.me.top_role.position:
+                return {'error': 'Tetik rolu bot rolunden yuksekta - izlenemez'}
+
+            # Hedefleri dogrula
+            gecerli = []
+            for h in hedefler:
+                r = guild.get_role(int(h))
+                if not r or r.is_default() or r.managed:
+                    continue
+                if r.position >= guild.me.top_role.position:
+                    continue
+                if r.id == t_rol.id:
+                    continue
+                gecerli.append(r.id)
+
+            mevcut = next((t for t in liste if int(t['tetik']) == int(tetik_id)), None)
+            if mevcut is None:
+                if gecerli:
+                    liste.append({'tetik': int(tetik_id), 'hedef': gecerli})
+            else:
+                mevcut['hedef'] = gecerli
+                if not gecerli:
+                    liste = [t for t in liste if int(t['tetik']) != int(tetik_id)]
+
+            await bot.db.update_setting(guild.id, 'rol_tetikleri', _json.dumps(liste))
+            return liste
+
+        try:
+            sonuc = run_async(uygula())
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+        if sonuc is None:
+            return jsonify({'error': 'Tetik rolu bulunamadi'}), 404
+        if isinstance(sonuc, dict) and 'error' in sonuc:
+            return jsonify(sonuc), 400
+
+        return jsonify({'success': True, 'count': len(sonuc)})
+
+    # GET
+    guild_id = request.args.get('guild_id')
+    if not guild_id:
+        return jsonify({'error': 'Sunucu secilmedi'}), 400
+
+    try:
+        guild = resolve_guild(bot, guild_id)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Gecersiz sunucu numarasi'}), 400
+
+    if not guild:
+        return jsonify({'error': 'Sunucu bulunamadi'}), 404
+
+    async def load():
+        settings = await bot.db.get_settings(guild.id) or {}
+        raw = settings.get('rol_tetikleri')
+        try:
+            liste = _json.loads(raw) if raw else []
+        except (ValueError, TypeError):
+            liste = []
+
+        temiz = []
+        for t in (liste if isinstance(liste, list) else []):
+            try:
+                t_id = int(t['tetik'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            t_rol = guild.get_role(t_id)
+            if not t_rol:
+                continue  # silinmis tetikleri gosterme
+
+            hedefler = []
+            for h in t.get('hedef', []):
+                try:
+                    r = guild.get_role(int(h))
+                except (TypeError, ValueError):
+                    continue
+                if r:
+                    hedefler.append({
+                        'id': str(r.id),
+                        'name': r.name,
+                        'assignable': r.position < guild.me.top_role.position,
+                    })
+
+            temiz.append({
+                'tetik_id': str(t_rol.id),
+                'tetik_name': t_rol.name,
+                'tetik_members': len(t_rol.members),
+                'watchable': t_rol.position < guild.me.top_role.position,
+                'hedefler': hedefler,
+            })
+
+        return {'tetikler': temiz, 'raw_count': len(liste)}
+
+    try:
+        return jsonify(run_async(load()))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/roller', methods=['GET', 'POST'])
 def api_roller():
     """Rodeo (girise otomatik rol) ayarlari - dashboard uzerinden"""

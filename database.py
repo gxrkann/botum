@@ -108,6 +108,7 @@ class Database:
                 uyari_rolleri TEXT,
                 rodeo_rolleri TEXT,
                 rodeo_mod TEXT,
+                rol_tetikleri TEXT,
                 sunucu_etiketi_role_id INTEGER,
                 sunucu_etiketi_otomatik INTEGER DEFAULT 0
             )
@@ -385,6 +386,7 @@ class Database:
             ('uyari_rolleri', 'TEXT'),
             ('rodeo_rolleri', 'TEXT'),
             ('rodeo_mod', 'TEXT'),
+            ('rol_tetikleri', 'TEXT'),
             ('sunucu_etiketi_role_id', 'INTEGER'),
             ('sunucu_etiketi_otomatik', 'INTEGER DEFAULT 0'),
             # Silah tablosu - marka / kategori / adet kolonlari

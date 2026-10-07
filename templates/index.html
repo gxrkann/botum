@@ -540,7 +540,7 @@
 
                 <div style="margin-bottom:15px;">
                     <label style="display:block;margin-bottom:5px;color:#888;">Sunucu</label>
-                    <select id="role-guild" onchange="loadRodeoRoles(); loadEtiket();"
+                    <select id="role-guild" onchange="loadRodeoRoles(); loadEtiket(); loadTetik();"
                             style="width:100%;padding:10px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;">
                         <option value="">Yükleniyor...</option>
                     </select>
@@ -590,6 +590,50 @@
                     ⚠️ <b>Yeşil</b> roller bot tarafından verilebilir.
                     <b>Kırmızı</b> roller bot rolünden yukarıda — verilemez.
                 </p>
+            </div>
+
+            <div class="section">
+                <h2>⚡ Rol Tetiği</h2>
+                <p style="color:#888;margin-bottom:15px;">
+                    Bir rol verildiğinde bot otomatik olarak başka rolü verir.
+                    Discord'un Sunucu Etiketi'ne bağımlı değildir.
+                </p>
+
+                <div class="theme-grid" style="margin-bottom:15px;">
+                    <div>
+                        <label style="display:block;margin-bottom:5px;color:#888;">
+                            Tetik Rol <span style="color:#666;">(verilince tetiklenir)</span>
+                        </label>
+                        <select id="tetik-role"
+                                style="width:100%;padding:10px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;">
+                            <option value="">Rol seçin</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block;margin-bottom:5px;color:#888;">
+                            Otomatik Verilecek Roller
+                        </label>
+                        <div id="tetik-targets"
+                             style="max-height:170px;overflow-y-auto;border:1px solid var(--card-border);
+                                    border-radius:calc(var(--radius)*0.5);padding:8px;">
+                            <p style="color:#888;padding:8px;">Tetik rolü seçin</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <button class="refresh-btn" onclick="saveTetik()">💾 Tetiği Kaydet</button>
+                    <button class="refresh-btn" onclick="loadTetik()"
+                            style="background:linear-gradient(90deg,#636e72,#4a4a4a);">🔄 Yenile</button>
+                    <button class="refresh-btn" onclick="deleteTetik()"
+                            style="background:linear-gradient(90deg,#e74c3c,#c0392b);">🗑️ Tetiği Sil</button>
+                </div>
+                <div id="tetik-status" style="margin-top:10px;font-size:0.9em;"></div>
+
+                <h3 style="margin:20px 0 10px;">Kayıtlı Tetikler</h3>
+                <div id="tetik-list">
+                    <p style="color:#888;">Yükleniyor...</p>
+                </div>
             </div>
 
             <div class="section">
@@ -1494,6 +1538,162 @@
             restartRefresh();
         }
 
+        // ==================== ROL TETIGI ====================
+        let TETIK_LISTESI = [];
+
+        function renderTetikTargets() {
+            const rid = document.getElementById('tetik-role').value;
+            const box = document.getElementById('tetik-targets');
+
+            if (!rid) {
+                box.innerHTML = '<p style="color:#888;padding:8px;">Tetik rolü seçin</p>';
+                return;
+            }
+
+            const mevcut = TETIK_LISTESI.find(t => t.tetik_id === rid);
+            const secili = new Set(mevcut ? mevcut.hedefler.map(h => h.id) : []);
+
+            box.innerHTML = ROL_LISTESI.filter(r => r.id !== rid).map(r => {
+                const seciliMi = secili.has(r.id);
+                const renk = r.assignable ? '#16a085' : '#e74c3c';
+                return `
+                    <label style="display:flex;align-items:center;gap:8px;padding:5px 6px;
+                                   border-radius:calc(var(--radius)*0.3);cursor:pointer;
+                                   border-left:3px solid ${renk};">
+                        <input type="checkbox" ${seciliMi ? 'checked' : ''}
+                               ${r.assignable ? '' : 'disabled'}
+                               onchange="this.parentElement.dataset.k='${r.id}'"
+                               style="width:16px;height:16px;">
+                        <span style="flex:1;font-size:0.9em;">${r.name}</span>
+                    </label>`;
+            }).join('');
+        }
+
+        async function loadTetik() {
+            const gid = document.getElementById('role-guild').value;
+            const st = document.getElementById('tetik-status');
+            if (!gid) return;
+
+            // Tetik rol select'ini doldur
+            const sel = document.getElementById('tetik-role');
+            sel.innerHTML = '<option value="">Rol seçin</option>' +
+                ROL_LISTESI.map(r => `<option value="${r.id}">${r.name} (${r.members})</option>`).join('');
+
+            try {
+                const d = await fetch('/api/tetik?guild_id=' + encodeURIComponent(gid))
+                    .then(r => r.json());
+
+                TETIK_LISTESI = d.tetikler || [];
+                renderTetikListesi();
+
+                st.style.color = '#888';
+                st.textContent = TETIK_LISTESI.length
+                    ? `${TETIK_LISTESI.length} tetik yüklendi`
+                    : 'Henüz tetik yok';
+
+                renderTetikTargets();
+            } catch (e) {
+                st.style.color = '#f74336';
+                st.textContent = '❌ ' + e.message;
+            }
+        }
+
+        function renderTetikListesi() {
+            const box = document.getElementById('tetik-list');
+
+            if (!TETIK_LISTESI.length) {
+                box.innerHTML = '<p style="color:#888;">📭 Tetik yok</p>';
+                return;
+            }
+
+            box.innerHTML = TETIK_LISTESI.map(t => {
+                const izlenebilir = t.watchable;
+                const hedefler = t.hedefler.map(h =>
+                    `${h.assignable ? '🟢' : '🔴'} ${h.name}`).join('  ') || '⚠️ hedef yok';
+                return `
+                    <div style="padding:10px 12px;margin-bottom:8px;border-radius:calc(var(--radius)*0.4);
+                                background:var(--card-bg);border-left:3px solid ${izlenebilir ? '#16a085' : '#e74c3c'};">
+                        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+                            <span style="font-weight:bold;">⚡ ${t.tetik_name}</span>
+                            <span style="color:#888;font-size:0.85em;">👥 ${t.tetik_members} kişide</span>
+                        </div>
+                        <div style="margin-top:6px;font-size:0.9em;">→ ${hedefler}</div>
+                        ${!izlenebilir ? '<div style="color:#e74c3c;font-size:0.8em;margin-top:4px;">🔒 Bu rol bot rolünden yukarıda — izlenemez</div>' : ''}
+                    </div>`;
+            }).join('');
+        }
+
+        async function saveTetik() {
+            const gid = document.getElementById('role-guild').value;
+            const rid = document.getElementById('tetik-role').value;
+            const st = document.getElementById('tetik-status');
+
+            if (!rid) { st.style.color = '#f44336'; st.textContent = '❌ Tetik rolü seçin'; return; }
+
+            // İşaretli hedefleri topla
+            const secili = [];
+            document.querySelectorAll('#tetik-targets input[type=checkbox]').forEach(cb => {
+                if (cb.checked) {
+                    const k = cb.parentElement.dataset.k;
+                    if (k) secili.push(k);
+                }
+            });
+
+            st.style.color = '#888';
+            st.textContent = 'Kaydediliyor...';
+
+            try {
+                const d = await fetch('/api/tetik', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ guild_id: gid, tetik: rid, hedef: secili })
+                }).then(r => r.json());
+
+                if (d.error) {
+                    st.style.color = '#f74336';
+                    st.textContent = '❌ ' + d.error;
+                } else {
+                    st.style.color = '#4CAF50';
+                    st.textContent = `✅ Tetik kaydedildi (${d.count} tanetetik)`;
+                    loadTetik();
+                }
+            } catch (e) {
+                st.style.color = '#f74336';
+                st.textContent = '❌ ' + e.message;
+            }
+        }
+
+        async function deleteTetik() {
+            const gid = document.getElementById('role-guild').value;
+            const rid = document.getElementById('tetik-role').value;
+            const st = document.getElementById('tetik-status');
+
+            if (!rid) { st.style.color = '#f74336'; st.textContent = '❌ Tetik rolü seçin'; return; }
+
+            st.style.color = '#888';
+            st.textContent = 'Siliniyor...';
+
+            try {
+                const d = await fetch('/api/tetik', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ guild_id: gid, tetik: rid, islem: 'sil' })
+                }).then(r => r.json());
+
+                if (d.error) {
+                    st.style.color = '#f74336';
+                    st.textContent = '❌ ' + d.error;
+                } else {
+                    st.style.color = '#4CAF50';
+                    st.textContent = '🗑️ Tetik silindi';
+                    loadTetik();
+                }
+            } catch (e) {
+                st.style.color = '#f74336';
+                st.textContent = '❌ ' + e.message;
+            }
+        }
+
         // ==================== SUNUCU ETIKETI ====================
         function syncEtiketRenk() {
             const hex = document.getElementById('etiket-renk-hex').value.trim();
@@ -1925,6 +2125,7 @@
                         `<option value="${g.id}">${g.name}</option>`).join('');
                     loadRodeoRoles();
                     loadEtiket();
+                    loadTetik();
                 } else {
                     sel.innerHTML = '<option value="">Bot sunucuda değil</option>';
                 }
@@ -2512,6 +2713,7 @@
             initRolePanel().catch(e => console.error('Rol paneli yuklenemedi:', e));
             loadMembers().catch(e => console.error('Uyeler yuklenemedi:', e));
             loadEtiket().catch(e => console.error('Etiket yuklenemedi:', e));
+            loadTetik().catch(e => console.error('Tetikler yuklenemedi:', e));
             restartRefresh();
         }
 

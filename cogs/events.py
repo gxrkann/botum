@@ -239,6 +239,245 @@ class Events(commands.Cog):
         except discord.HTTPException:
             pass
 
+    # ==================== ROL TETIKI ====================
+    # Bicakim tetik zincirini sinirla (A -> B -> C -> A dongusunu onler)
+    TETIK_DERINLIK = 3
+
+    async def _tetikleri(self, guild_id: int) -> list:
+        """[{'tetik': role_id, 'hedef': [role_id,...]}, ...]"""
+        import json as _json
+        settings = await self.bot.db.get_settings(guild_id) or {}
+        raw = settings.get('rol_tetikleri')
+        if not raw:
+            return []
+        try:
+            veri = _json.loads(raw)
+            return veri if isinstance(veri, list) else []
+        except (ValueError, TypeError, AttributeError):
+            return []
+
+    async def _tetikleri_kaydet(self, guild_id: int, tetikler: list):
+        import json as _json
+        await self.bot.db.update_setting(
+            guild_id, 'rol_tetikleri', _json.dumps(tetikler))
+
+    async def _tetik_isle(self, member, yeni_roller, derinlik: int = 1):
+        """
+        Uye yeni rol aldiysa eslesen tetikleri calistir.
+
+        Ornek: tetik = 5005 (sunucu etiketi), hedef = Vatandaş
+        Birine 5005 verildigi an bot otomatik olarak Vatandaş verir.
+        """
+        if member.bot or member.id == self.bot.user.id:
+            return
+        if derinlik > self.TETIK_DERINLIK:
+            return
+
+        tetikler = await self._tetikleri(member.guild.id)
+        if not tetikler:
+            return
+
+        me = member.guild.me
+        verilecek = []
+        islenen = set()
+
+        for t in tetikler:
+            try:
+                tetik_id = int(t.get('tetik'))
+                hedefler = [int(x) for x in (t.get('hedef') or [])]
+            except (TypeError, ValueError, KeyError):
+                continue
+
+            # Tetik tetiklendiyse hedefleri ver
+            if tetik_id in yeni_roller:
+                islenen.add(tetik_id)
+                for hid in hedefler:
+                    if hid == tetik_id or hid in verilecek:
+                        continue
+                    role = member.guild.get_role(hid)
+                    if not role or role.is_default() or role.managed:
+                        continue
+                    # Bot rolunden yukseksa veremez
+                    if role >= me.top_role:
+                        continue
+                    if role in member.roles:
+                        continue
+                    verilecek.append(role)
+
+        if not verilecek:
+            return
+
+        try:
+            await member.add_roles(*verilecek, reason="Rol tetigi")
+        except discord.Forbidden:
+            return
+        except discord.HTTPException:
+            return
+
+        # Zincir: verilen roller tetik baslatsin mi?
+        zincir = [r.id for r in verilecek]
+        for r in verilecek:
+            log_embed = discord.Embed(
+                title="⚡ Rol Tetiği",
+                description=(f"{member.mention} → **{' '.join(r.mention for r in verilecek)}**"),
+                color=discord.Color.dark_teal(),
+                timestamp=datetime.now()
+            )
+            await self._send_log(member.guild.id, 'rol', log_embed)
+
+        await asyncio.sleep(1.5)
+        await self._tetik_isle(member, set(zincir), derinlik + 1)
+
+    @app_commands.command(name='rol_tetik', description='Rol verildiğinde otomatik başka rol verir')
+    @app_commands.describe(
+        islem='İşlem',
+        tetik='Tetikleyen rol (verilince hedef otomatik verilir)',
+        hedef='Otomatik verilecek rol'
+    )
+    @app_commands.choices(islem=[
+        app_commands.Choice(name='Ekle - Tetik → Hedef', value='ekle'),
+        app_commands.Choice(name='Kaldır - Tetik rolünü sil', value='kaldir'),
+        app_commands.Choice(name='Hedef Ekle - Mevcut tetiğe rol ekle', value='hedef_ekle'),
+        app_commands.Choice(name='Hedef Çıkar', value='hedef_cikar'),
+        app_commands.Choice(name='Temizle - Tüm tetikleri sil', value='temizle'),
+        app_commands.Choice(name='Listele', value='liste'),
+    ])
+    @app_commands.checks.has_permissions(manage_roles=True)
+    async def rol_tetik(self, interaction: discord.Interaction, islem: str,
+                        tetik: discord.Role | None = None,
+                        hedef: discord.Role | None = None):
+
+        guild = interaction.guild
+        gid = guild.id
+        me = guild.me
+        tetikler = await self._tetikleri(gid)
+
+        def gorunum(t):
+            t_r = guild.get_role(int(t['tetik']))
+            h_r = [guild.get_role(int(x)) for x in t.get('hedef', [])]
+            h_ad = [r.mention for r in h_r if r] or ["?"]
+
+            # Tetiklenen uye sayisi
+            t_uye = len(t_r.members) if t_r else 0
+            return (f"tetik={t_r.mention if t_r else '?'} ({t_uye} üye) "
+                    f"→ {' '.join(h_ad)}")
+
+        # ---------- LISTELE ----------
+        if islem == 'liste':
+            if not tetikler:
+                await interaction.response.send_message(
+                    "📭 **Hiç tetik yok.**\n\n"
+                    "Eklemek için:\n"
+                    "`/rol_tetik islem:Ekle tetik:@5005 hedef:@Vatandaş`",
+                    ephemeral=True)
+                return
+
+            embed = discord.Embed(
+                title="⚡ Rol Tetikleri",
+                description=f"**{len(tetikler)}** tetik tanımlı",
+                color=discord.Color.dark_teal(),
+                timestamp=datetime.now()
+            )
+            for t in tetikler:
+                embed.add_field(name=f"#{tetikler.index(t) + 1}",
+                                value=gorunum(t), inline=False)
+            embed.set_footer(text="Bu roller verilince otomatik verilir")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # ---------- TEMIZLE ----------
+        if islem == 'temizle':
+            adet = len(tetikler)
+            await self._tetikleri_kaydet(gid, [])
+            await interaction.response.send_message(
+                f"🗑️ **{adet}** tetik silindi.", ephemeral=True)
+            return
+
+        if not tetik:
+            await interaction.response.send_message(
+                "❌ Tetik rolü seçmelisin!", ephemeral=True)
+            return
+
+        # Tetik rolunun var oldugunu dogrula
+        if tetik.position >= me.top_role.position and islem != 'kaldir':
+            if islem in ('ekle',):
+                await interaction.response.send_message(
+                    "❌ Bu rol bot rolünden yukarıda, izlenemez!", ephemeral=True)
+                return
+
+        # ---------- TETIK SIL ----------
+        if islem == 'kaldir':
+            yeni = [t for t in tetikler if int(t['tetik']) != tetik.id]
+            if len(yeni) == len(tetikler):
+                await interaction.response.send_message(
+                    "ℹ️ Bu tetik kayıtlı değil!", ephemeral=True)
+                return
+            await self._tetikleri_kaydet(gid, yeni)
+            await interaction.response.send_message(
+                f"🗑️ **{tetik.mention}** tetiği silindi.", ephemeral=True)
+            return
+
+        if not hedef:
+            await interaction.response.send_message(
+                "❌ Hedef rol seçmelisin!", ephemeral=True)
+            return
+
+        # ---------- TETIK EKLE / HEDEF EKLE ----------
+        if tetik.id == hedef.id:
+            await interaction.response.send_message(
+                "❌ Tetik ve hedef aynı olamaz! ( sonsuz döngü )", ephemeral=True)
+            return
+
+        if hedef >= me.top_role.position:
+            await interaction.response.send_message(
+                "❌ Hedef rol bot rolünden yukarıda, veremem!\n"
+                "Bot rolünü yükselt.", ephemeral=True)
+            return
+
+        mevcut = next((t for t in tetikler if int(t['tetik']) == tetik.id), None)
+
+        if mevcut is None:
+            tetikler.append({'tetik': tetik.id, 'hedef': [hedef.id]})
+            await self._tetikleri_kaydet(gid, tetikler)
+            await interaction.response.send_message(
+                f"⚡ **Tetik oluşturuldu!**\n\n"
+                f"Birine **{tetik.mention}** verildiği an "
+                f"otomatik **{hedef.mention}** verilecek.\n\n"
+                f"Bunu Discord'dan, dashboard'dan veya herhangi bir bot "
+                f"yaptığında tetiklenir.", ephemeral=True)
+            return
+
+        # Mevcut tetiğe hedef ekle / hedef çıkar
+        hedefler = [int(x) for x in mevcut.get('hedef', [])]
+
+        if islem == 'hedef_ekle':
+            if hedef.id in hedefler:
+                await interaction.response.send_message(
+                    "ℹ️ Bu hedef zaten ekli!", ephemeral=True)
+                return
+            hedefler.append(hedef.id)
+        else:  # hedef_cikar
+            if hedef.id not in hedefler:
+                await interaction.response.send_message(
+                    "ℹ️ Bu hedef tetikte kayıtlı değil!", ephemeral=True)
+                return
+            hedefler.remove(hedef.id)
+
+        mevcut['hedef'] = hedefler
+
+        # Hicbir hedef kalmadiysa tetigi de sil
+        if not hedefler:
+            tetikler = [t for t in tetikler if int(t['tetik']) != tetik.id]
+            await self._tetikleri_kaydet(gid, tetikler)
+            await interaction.response.send_message(
+                f"🗑️ Son hedef kaldırıldı, **{tetik.mention}** tetiği silindi.",
+                ephemeral=True)
+            return
+
+        await self._tetikleri_kaydet(gid, tetikler)
+        await interaction.response.send_message(
+            f"✅ Güncellendi:\n`{gorunum(mevcut)}`", ephemeral=True)
+
     # ==================== SUNUCU ETIKETI ====================
     @app_commands.command(name='sunucu_etiketi', description='Sunucu etiketi (kullanıcı adının yanında görünen renkli rol)')
     @app_commands.describe(
@@ -996,6 +1235,11 @@ class Events(commands.Cog):
     # ==================== UYE GUNCELLEME ====================
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
+        # ---- ROL TETIGI (en once calisir) ----
+        yeni_roller = {r.id for r in after.roles} - {r.id for r in before.roles}
+        if yeni_roller:
+            await self._tetik_isle(after, yeni_roller)
+
         # Takma ad degisikligi -> uye-log
         if before.nick != after.nick:
             embed = discord.Embed(
