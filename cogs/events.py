@@ -181,15 +181,24 @@ class Events(commands.Cog):
 
     async def _rodeo_uyele(self, member, settings: dict):
         """Sunucuya giren uyeye rodeo rollerini verir"""
-        roller, mod = self._rodeo_ayarlar(settings)
-        if not roller:
-            return
-
         guild = member.guild
         me = guild.me
 
-        # Bot olmasin, rol siralamasi kontrolu
         if member.id == me.id or member.bot:
+            return
+
+        roller, mod = self._rodeo_ayarlar(settings)
+
+        # Etiket otomatik acik ama rodeo listesinde yoksa (ayarlar bayatlamis)
+        # etiketi cozumleyip listeye ekle
+        if settings.get('sunucu_etiketi_otomatik'):
+            etiket = await self._etiket_rolu_bul(guild, settings)
+            if etiket and etiket.id not in roller:
+                roller.append(etiket.id)
+                await self._rodeo_listeye_ekle(guild.id, etiket.id)
+            settings['sunucu_etiketi_role_id'] = etiket.id if etiket else None
+
+        if not roller:
             return
 
         verilecek = []
@@ -216,6 +225,390 @@ class Events(commands.Cog):
             pass
         except discord.HTTPException:
             pass
+
+    # ==================== SUNUCU ETIKETI ====================
+    @app_commands.command(name='sunucu_etiketi', description='Sunucu etiketi (kullanıcı adının yanında görünen renkli rol)')
+    @app_commands.describe(
+        islem='İşlem',
+        ad='Etiket rolünün adı (örn: ٥٠٠٥۰)',
+        renk='Etiket rengi (hex, örn: #FF0000)',
+        oto='Yeni gelenlere otomatik verilsin mi'
+    )
+    @app_commands.choices(islem=[
+        app_commands.Choice(name='Oluştur / Güncelle - Etiket rolü yap', value='olustur'),
+        app_commands.Choice(name='🆕 Otomatik Ver - Yeni gelenlere ver', value='oto_ac'),
+        app_commands.Choice(name='🚫 Otomatik Ver - Yeni gelenlere verme', value='oto_kapat'),
+        app_commands.Choice(name='⬆️ Yukarı Taşı - En üste koy', value='yukari'),
+        app_commands.Choice(name='🗑️ Sil - Etiketi kaldır', value='sil'),
+        app_commands.Choice(name='📊 Durum - Etiket bilgisi', value='durum'),
+    ])
+    @app_commands.checks.has_permissions(administrator=True)
+    async def sunucu_etiketi(self, interaction: discord.Interaction, islem: str,
+                             ad: str | None = None,
+                             renk: str | None = None,
+                             oto: bool | None = None):
+
+        guild = interaction.guild
+        me = guild.me
+        settings = await self.bot.db.get_settings(guild.id) or {}
+        rid = settings.get('sunucu_etiketi_role_id')
+        etiket_rolu = guild.get_role(rid) if rid else None
+
+        # ---------- DURUM ----------
+        if islem == 'durum':
+            await interaction.response.defer(ephemeral=True)
+
+            if not etiket_rolu:
+                await interaction.followup.send(
+                    "🏷️ **Sunucu etiketi yok.**\n\n"
+                    "Oluştur: `/sunucu_etiketi islem:Oluştur ad:5005 renk:#FF0000`",
+                    ephemeral=True)
+                return
+
+            otomatik = bool(settings.get('sunucu_etiketi_otomatik'))
+            uye_sayisi = len(etiket_rolu.members)
+            toplam = guild.member_count
+            oran = (uye_sayisi / toplam * 100) if toplam else 0
+
+            embed = discord.Embed(
+                title="🏷️ Sunucu Etiketi Durumu",
+                color=etiket_rolu.color if etiket_rolu.color.value else discord.Color.blue(),
+                timestamp=datetime.now()
+            )
+            embed.add_field(name="Rol", value=f"{etiket_rolu.mention}\n`{etiket_rolu.id}`", inline=False)
+            embed.add_field(name="Renk", value=f"`{etiket_rolu.color}`", inline=True)
+            embed.add_field(name="Görünüm", value="Açık (hoist)" if etiket_rolu.hoist else "Kapalı", inline=True)
+            embed.add_field(name="Otomatik Ver", value="✅ Açık" if otomatik else "❌ Kapalı", inline=True)
+            embed.add_field(
+                name="Kapsama",
+                value=f"**{uye_sayisi}** / {toplam} üye (**%{oran:.1f}**)",
+                inline=False
+            )
+
+            # Ornek gorunum
+            embed.add_field(
+                name="👀 Örnek Görünüm",
+                value=f"`{interaction.user.display_name}` → **{etiket_rolu.name}** {interaction.user.display_name}",
+                inline=False
+            )
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+
+        # ---------- SIL ----------
+        if islem == 'sil':
+            await interaction.response.defer(ephemeral=True)
+
+            if not etiket_rolu:
+                await interaction.followup.send("❌ Silinecek etiket yok!", ephemeral=True)
+                return
+
+            # Once rolu sil, sonra ayarlardan cikar
+            try:
+                await etiket_rolu.delete(reason="Sunucu etiketi silindi")
+            except discord.Forbidden:
+                await interaction.followup.send(
+                    "❌ Rol silinemedi! Botun rolü etiketten yukarıda olmalı.",
+                    ephemeral=True)
+                return
+            except discord.HTTPException as e:
+                await interaction.followup.send(f"❌ Silinemedi: `{e}`", ephemeral=True)
+                return
+
+            await self.bot.db.update_setting(guild.id, 'sunucu_etiketi_role_id', None)
+            await self.bot.db.update_setting(guild.id, 'sunucu_etiketi_otomatik', 0)
+
+            # Rodeo listesinden de cikar
+            await self._rodeo_listeden_cikar(guild.id, etiket_rolu.id)
+
+            await interaction.followup.send(
+                f"🗑️ **{etiket_rolu.name}** etiketi silindi.", ephemeral=True)
+            return
+
+        # ---------- OTOMATIK AC / KAPAT ----------
+        if islem in ('oto_ac', 'oto_kapat'):
+            # Kayit bayatlamis olabilir - yeniden cozumle
+            if not etiket_rolu:
+                etiket_rolu = await self._etiket_rolu_bul(guild, settings)
+
+            if not etiket_rolu:
+                await interaction.response.send_message(
+                    "❌ Sunucuda etiket rolü bulunamadı!\n\n"
+                    "Önce oluştur: `/sunucu_etiketi islem:Oluştur ad:5005`",
+                    ephemeral=True)
+                return
+
+            if islem == 'oto_ac':
+                if etiket_rolu.position >= me.top_role.position:
+                    await interaction.response.send_message(
+                        "❌ Etiket rolü bot rolünden yukarıda, veremem!\n"
+                        "`/sunucu_etiketi islem:Yukarı Taşı` ile yukarı taşı",
+                        ephemeral=True)
+                    return
+
+                await self.bot.db.update_setting(guild.id, 'sunucu_etiketi_otomatik', 1)
+                await self.bot.db.update_setting(guild.id, 'sunucu_etiketi_role_id',
+                                                 etiket_rolu.id)
+                eklendi = await self._rodeo_listeye_ekle(guild.id, etiket_rolu.id)
+
+                await interaction.response.send_message(
+                    f"✅ Otomatik verme **açık**\n\n"
+                    f"Etiket: {etiket_rolu.mention}\n"
+                    f"Artık sunucuya giren herkese verilecek, "
+                    f"çıkınca otomatik geri alınacak."
+                    + ("" if eklendi else
+                       f"\n⚠️ Rodeo listesine eklenemedi, listede zaten var olabilir."),
+                    ephemeral=True)
+            else:
+                await self.bot.db.update_setting(guild.id, 'sunucu_etiketi_otomatik', 0)
+                cikti = await self._rodeo_listeden_cikar(guild.id, etiket_rolu.id)
+
+                await interaction.response.send_message(
+                    f"✅ Otomatik verme **kapalı**"
+                    + (f"\nRodeo listesinden çıkarıldı." if cikti else ""),
+                    ephemeral=True)
+            return
+
+        # ---------- YUKARI TASI ----------
+        if islem == 'yukari':
+            if not etiket_rolu:
+                await interaction.response.send_message("❌ Etiket rolü yok!", ephemeral=True)
+                return
+
+            await interaction.response.defer(ephemeral=True)
+
+            try:
+                # Botun rolunun hemen altina kadar yukselt
+                await etiket_rolu.edit(position=me.top_role.position - 1,
+                                       reason="Etiket en ustte")
+                await interaction.followup.send(
+                    f"⬆️ **{etiket_rolu.name}** yukarı taşındı.\n\n"
+                    f"Artık üyelerin çoğu bu etiketi gösterir.",
+                    ephemeral=True)
+            except discord.Forbidden:
+                await interaction.followup.send(
+                    "❌ Taşınamadı! Botun rolünü etiketten yukarı çek.",
+                    ephemeral=True)
+            except discord.HTTPException as e:
+                await interaction.followup.send(f"❌ Taşınamadı: `{e}`", ephemeral=True)
+            return
+
+        # ---------- OLUSTUR / GUNCELLE ----------
+        await interaction.response.defer(ephemeral=True)
+
+        ad = (ad or "").strip() or "5005"
+        if len(ad) > 32:
+            ad = ad[:32]
+
+        # Rengi coz
+        color = discord.Color.gold()
+        if renk:
+            try:
+                color = discord.Color.from_str(renk.strip())
+            except (ValueError, TypeError):
+                await interaction.followup.send(
+                    f"❌ Renk hatalı: `{renk}`\n"
+                    f"Örnek format: `#FF0000` veya `FF0000`", ephemeral=True)
+                return
+
+        # Var olan rolü guncelle
+        if etiket_rolu:
+            try:
+                await etiket_rolu.edit(name=ad, color=color, hoist=True,
+                                        reason="Sunucu etiketi guncellendi")
+            except discord.Forbidden:
+                await interaction.followup.send(
+                    "❌ Düzenlenemedi! Rol bot rolünden yukarıda olabilir.",
+                    ephemeral=True)
+                return
+
+            await self.bot.db.update_setting(guild.id, 'sunucu_etiketi_role_id',
+                                             etiket_rolu.id)
+
+            otomatik = bool(settings.get('sunucu_etiketi_otomatik'))
+            await interaction.followup.send(
+                f"🏷️ Etiket güncellendi: **{ad}** `{renk or etiket_rolu.color}`\n\n"
+                f"Rol: {etiket_rolu.mention}\n"
+                f"Üyede etiket var mı: **{len(etiket_rolu.members)}** kişi\n\n"
+                + ("✅ Otomatik verme **açık** — yeni gelenlere verilecek."
+                   if otomatik else
+                   f"⚠️ Otomatik verme kapalı. Açmak için:\n"
+                   f"`/sunucu_etiketi islem:Otomatik Ver`"),
+                ephemeral=True)
+            return
+
+        # Yeni rol olustur
+        try:
+            yeni = await guild.create_role(
+                name=ad, color=color, hoist=True,
+                reason="Sunucu etiketi olusturuldu"
+            )
+        except discord.Forbidden:
+            await interaction.followup.send(
+                "❌ Rol oluşturulamadı! Botta **Rolleri Yönet** izni olmalı.",
+                ephemeral=True)
+            return
+        except discord.HTTPException as e:
+            await interaction.followup.send(f"❌ Oluşturulamadı: `{e}`", ephemeral=True)
+            return
+
+        # Yukari tasi (bot rolunun altina kadar)
+        try:
+            await yeni.edit(position=me.top_role.position - 1)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+
+        await self.bot.db.update_setting(guild.id, 'sunucu_etiketi_role_id', yeni.id)
+
+        # Otomatik verme acik mi?
+        otomatik = bool(settings.get('sunucu_etiketi_otomatik'))
+        if otomatik:
+            await self._rodeo_listeye_ekle(guild.id, yeni.id)
+
+        await interaction.followup.send(
+            f"🏷️ **Sunucu etiketi oluşturuldu!**\n\n"
+            f"Etiket: {yeni.mention} — `{ad}`\n"
+            f"Renk: `{renk or 'varsayılan'}`\n"
+            f"Durum: {'✅ Otomatik veriliyor' if otomatik else '❌ Otomatik kapalı'}\n\n"
+            f"**Yeni gelenlere otomatik vermek için:**\n"
+            f"`/sunucu_etiketi islem:Otomatik Ver`",
+            ephemeral=True)
+
+    async def _etiket_rolu_bul(self, guild, settings: dict = None):
+        """
+        Sunucu etiketi rolu cozumle - KENDINI ONARAN
+
+        Normalde kayitli rol kullanilir. Ama kullanici etiketi Discord'dan
+        elle degistirirse (rolu silip yenisini yapti gibi) kayit bayatlar.
+        Bu durumda sunucudaki en ustteki hoist rolu bulunur ve yeni rolu
+        etiket olarak kaydeder. Boylece sistem bozulmaz.
+        """
+        me = guild.me
+
+        # 1) Kayitli rol gecerli mi?
+        rid = (settings or {}).get('sunucu_etiketi_role_id')
+        if rid:
+            kayitli = guild.get_role(rid)
+            if kayitli and not kayitli.managed:
+                return kayitli
+
+        # 2) Bayatti - sunucudaki hoist rollerine bak
+        adaylar = [
+            r for r in guild.roles
+            if r.hoist and not r.is_default() and not r.managed
+            and r.id != me.id
+        ]
+
+        if adaylar:
+            # En yukaridaki = en gorunur etiket
+            adaylar.sort(key=lambda r: -r.position)
+            bulunan = adaylar[0]
+
+            # Ayarlari tazele
+            try:
+                await self.bot.db.update_setting(guild.id,
+                                                 'sunucu_etiketi_role_id', bulunan.id)
+            except Exception:
+                pass
+
+            return bulunan
+
+        return None
+
+    async def _etiket_uyele_cikar(self, member, settings: dict):
+        """Uye sunucudan ayrilinca etiket rolu geri alinir"""
+        if member.id == self.bot.user.id or member.bot:
+            return
+
+        rol = await self._etiket_rolu_bul(member.guild, settings)
+        if not rol:
+            return
+        if rol not in member.roles:
+            return
+
+        try:
+            await member.remove_roles(rol, reason="Sunucu etiketi - ayrilma")
+        except discord.Forbidden:
+            pass
+        except discord.HTTPException:
+            pass
+
+    @commands.Cog.listener()
+    async def on_guild_role_delete(self, role):
+        """Rol silinmesini logla + etiket ayarlarini onar"""
+        embed = discord.Embed(
+            title="🗑️ Rol Silindi",
+            description=f"Rol silindi: **{role.name}**\n**ID:** `{role.id}`",
+            color=discord.Color.red(),
+            timestamp=datetime.now()
+        )
+        await self._send_log(role.guild.id, 'mod', embed)
+
+        if role.is_default() or role.managed:
+            return
+
+        settings = await self.bot.db.get_settings(role.guild.id) or {}
+        if settings.get('sunucu_etiketi_role_id') != role.id:
+            return
+
+        # Kayit silindi - temizle
+        await self.bot.db.update_setting(role.guild.id, 'sunucu_etiketi_role_id', None)
+        await self._rodeo_listeden_cikar(role.guild.id, role.id)
+
+        # Kalan hoist rolunu etiket olarak benimsemeyi dene
+        yeni = await self._etiket_rolu_bul(role.guild, {})
+        if yeni and settings.get('sunucu_etiketi_otomatik'):
+            await self._rodeo_listeye_ekle(role.guild.id, yeni.id)
+
+    @commands.Cog.listener()
+    async def on_guild_role_update(self, before, after):
+        """Rol guncellemesini logla + etiket ayarlarini senkronla"""
+        if before.name != after.name:
+            embed = discord.Embed(
+                title="✏️ Rol Güncellendi",
+                description=f"**{before.name}** → **{after.name}**",
+                color=discord.Color.orange(),
+                timestamp=datetime.now()
+            )
+            await self._send_log(after.guild.id, 'mod', embed)
+
+        if after.is_default() or after.managed:
+            return
+
+        # Etiket rolu elden gecirildi / yeni hoist rolu olustu
+        if after.hoist and not before.hoist:
+            settings = await self.bot.db.get_settings(after.guild.id) or {}
+            kayitli = await self._etiket_rolu_bul(after.guild, settings)
+
+            if not kayitli or after.position > kayitli.position:
+                await self.bot.db.update_setting(
+                    after.guild.id, 'sunucu_etiketi_role_id', after.id)
+                if settings.get('sunucu_etiketi_otomatik'):
+                    await self._rodeo_listeye_ekle(after.guild.id, after.id)
+
+    async def _rodeo_listeye_ekle(self, guild_id: int, role_id: int) -> bool:
+        """Rodeo listesine rol ekler"""
+        import json as _json
+        settings = await self.bot.db.get_settings(guild_id) or {}
+        roller, mod = self._rodeo_ayarlar(settings)
+        if role_id in roller:
+            return False
+        roller.append(role_id)
+        await self.bot.db.update_setting(guild_id, 'rodeo_rolleri',
+                                         _json.dumps(roller))
+        return True
+
+    async def _rodeo_listeden_cikar(self, guild_id: int, role_id: int) -> bool:
+        """Rodeo listesinden rol cikarir"""
+        import json as _json
+        settings = await self.bot.db.get_settings(guild_id) or {}
+        roller, mod = self._rodeo_ayarlar(settings)
+        if role_id not in roller:
+            return False
+        roller.remove(role_id)
+        await self.bot.db.update_setting(guild_id, 'rodeo_rolleri',
+                                         _json.dumps(roller))
+        return True
 
     # ==================== RODEO (GIRIS ROLLERI) ====================
     def _rodeo_ayarlar(self, settings: dict):
@@ -394,6 +787,9 @@ class Events(commands.Cog):
 
         # DM gonder
         asyncio.create_task(self._send_dm(member, member.guild, settings, 'dm_cikis'))
+
+        # Sunucu etiketi geri alinsin
+        asyncio.create_task(self._etiket_uyele_cikar(member, settings))
 
         roles = ', '.join(r.mention for r in member.roles[1:]) or 'Yok'
 
@@ -659,26 +1055,6 @@ class Events(commands.Cog):
         embed.add_field(name="Önce", value=before.name, inline=True)
         embed.add_field(name="Sonra", value=after.name, inline=True)
         await self._send_log(after.guild.id, 'mod', embed)
-
-    @commands.Cog.listener()
-    async def on_guild_role_create(self, role):
-        embed = discord.Embed(
-            title="✅ Rol Oluşturuldu",
-            description=f"Rol oluşturuldu: {role.mention}\n**ID:** `{role.id}`",
-            color=discord.Color.green(),
-            timestamp=datetime.now()
-        )
-        await self._send_log(role.guild.id, 'mod', embed)
-
-    @commands.Cog.listener()
-    async def on_guild_role_delete(self, role):
-        embed = discord.Embed(
-            title="🗑️ Rol Silindi",
-            description=f"Rol silindi: **{role.name}**\n**ID:** `{role.id}`",
-            color=discord.Color.red(),
-            timestamp=datetime.now()
-        )
-        await self._send_log(role.guild.id, 'mod', embed)
 
     # ==================== MODERASYON LOGLARI ====================
     @commands.Cog.listener()

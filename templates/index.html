@@ -476,6 +476,56 @@
 
         <div id="tab-guilds" class="tab-content active">
             <div class="section">
+                <h2>🏷️ Sunucu Etiketi</h2>
+                <p style="color:#888;margin-bottom:15px;">
+                    Üyelerin kullanıcı adının yanında görünen renkli etiket.
+                    <b>hoist</b> açık olduğu için ayrı satırda görünür.
+                </p>
+
+                <div id="etiket-status" style="margin-bottom:12px;font-size:0.95em;"></div>
+
+                <div class="theme-grid" style="margin-bottom:12px;">
+                    <div>
+                        <label style="display:block;margin-bottom:5px;color:#888;">Etiket Metni</label>
+                        <input type="text" id="etiket-ad" placeholder="5005" maxlength="32"
+                               style="width:100%;padding:10px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;">
+                    </div>
+                    <div>
+                        <label style="display:block;margin-bottom:5px;color:#888;">Renk</label>
+                        <div style="display:flex;gap:8px;">
+                            <input type="color" id="etiket-renk" value="#FFD700"
+                                   style="width:52px;height:42px;padding:3px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);">
+                            <input type="text" id="etiket-renk-hex" value="#FFD700" oninput="syncEtiketRenk()"
+                                   style="flex:1;padding:10px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+                    <button class="refresh-btn" onclick="saveEtiket('olustur')">💾 Oluştur / Güncelle</button>
+                    <button class="refresh-btn" onclick="saveEtiket('yukari')"
+                            style="background:linear-gradient(90deg,#3498db,#2980b9);">⬆️ Yukarı Taşı</button>
+                    <button class="refresh-btn" onclick="saveEtiket('sil')"
+                            style="background:linear-gradient(90deg,#e74c3c,#c0392b);">🗑️ Sil</button>
+                </div>
+
+                <label style="display:flex;align-items:center;gap:10px;padding:12px;
+                               border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);
+                               background:var(--card-bg);cursor:pointer;">
+                    <input type="checkbox" id="etiket-oto" onchange="saveEtiket('oto')"
+                           style="width:20px;height:20px;cursor:pointer;">
+                    <div>
+                        <div style="font-weight:bold;color:#4CAF50;">🆕 Yeni gelenlere otomatik ver</div>
+                        <small style="color:#888;">Sunucuya giren her üye bu etiketi alır</small>
+                    </div>
+                </label>
+
+                <p style="color:#666;font-size:0.85em;margin-top:12px;">
+                    💡 Etiket en üstte görünür. Bir üyede birden fazla <b>hoist</b> rolü varsa
+                    sadece en yüksektekisi görünür.
+                </p>
+            </div>
+            <div class="section">
                 <h2>Sunucular</h2>
                 <div class="guild-list" id="guild-list">
                     <p style="color: #888;">Yükleniyor...</p>
@@ -490,7 +540,7 @@
 
                 <div style="margin-bottom:15px;">
                     <label style="display:block;margin-bottom:5px;color:#888;">Sunucu</label>
-                    <select id="role-guild" onchange="loadRodeoRoles()"
+                    <select id="role-guild" onchange="loadRodeoRoles(); loadEtiket();"
                             style="width:100%;padding:10px;border-radius:calc(var(--radius)*0.5);border:1px solid var(--card-border);background:var(--card-bg);color:#fff;">
                         <option value="">Yükleniyor...</option>
                     </select>
@@ -1444,6 +1494,125 @@
             restartRefresh();
         }
 
+        // ==================== SUNUCU ETIKETI ====================
+        function syncEtiketRenk() {
+            const hex = document.getElementById('etiket-renk-hex').value.trim();
+            if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+                document.getElementById('etiket-renk').value = hex;
+            }
+        }
+
+        async function loadEtiket() {
+            const sel = document.getElementById('role-guild');
+            const st = document.getElementById('etiket-status');
+            if (!sel || !sel.value) return;
+
+            try {
+                const d = await fetch('/api/etiket?guild_id=' +
+                    encodeURIComponent(sel.value)).then(r => r.json());
+
+                if (d.error) {
+                    st.style.color = '#f74336';
+                    st.textContent = '❌ ' + d.error;
+                    return;
+                }
+
+                const oto = document.getElementById('etiket-oto');
+
+                if (!d.var) {
+                    document.getElementById('etiket-ad').value = '';
+                    oto.checked = false;
+                    oto.disabled = true;
+                    st.style.color = '#888';
+                    st.textContent = '⚪ Henüz etiket yok. Bir metin ve renk seçip ' +
+                                     '"Oluştur" butonuna bas.';
+                    return;
+                }
+
+                const r = d.role;
+                document.getElementById('etiket-ad').value = r.name;
+                document.getElementById('etiket-renk').value = r.color;
+                document.getElementById('etiket-renk-hex').value = r.color;
+                oto.checked = d.otomatik;
+                oto.disabled = !r.assignable;
+
+                const oran = d.total_members
+                    ? (r.members / d.total_members * 100).toFixed(1) : '0.0';
+
+                st.innerHTML =
+                    `🏷️ **${r.name}** <code>${r.color}</code><br>` +
+                    `👥 Etiketi olan: **${r.members}** / ${d.total_members} (%${oran})<br>` +
+                    `📍 Sıra: ${r.position} ` +
+                    (r.assignable
+                        ? '<span style="color:#4CAF50;">(bot verebilir)</span>'
+                        : '<span style="color:#e74c3c;">(bot rolünden yukarıda — verilemez)</span>') +
+                    (d.otomatik
+                        ? '<br>✅ Yeni gelenlere otomatik veriliyor'
+                        : '<br>⚠️ Otomatik verme kapalı');
+
+            } catch (e) {
+                st.style.color = '#f44336';
+                st.textContent = '❌ ' + e.message;
+            }
+        }
+
+        async function saveEtiket(islem) {
+            const gid = document.getElementById('role-guild').value;
+            const st = document.getElementById('etiket-status');
+            if (!gid) { st.style.color = '#f74336'; st.textContent = '❌ Sunucu seç'; return; }
+
+            const govde = { guild_id: gid, islem: islem };
+
+            if (islem === 'olustur') {
+                const ad = document.getElementById('etiket-ad').value.trim();
+                const renk = document.getElementById('etiket-renk-hex').value.trim();
+                if (!ad) {
+                    st.style.color = '#f44336';
+                    st.textContent = '❌ Etiket metni gir';
+                    return;
+                }
+                govde.name = ad;
+                govde.color = renk;
+            }
+
+            if (islem === 'oto') {
+                govde.acik = document.getElementById('etiket-oto').checked;
+            }
+
+            st.style.color = '#888';
+            st.textContent = 'İşleniyor...';
+
+            try {
+                const d = await fetch('/api/etiket', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(govde)
+                }).then(r => r.json());
+
+                if (d.error) {
+                    st.style.color = '#f44336';
+                    st.textContent = '❌ ' + d.error;
+                } else {
+                    const mesajlar = {
+                        olustur: '✅ Etiket oluşturuldu/güncellendi',
+                        yukari: '✅ Etiket en üste taşındı',
+                        sil: '🗑️ Etiket silindi',
+                        oto: d.acik
+                            ? '✅ Yeni gelenlere otomatik veriliyor'
+                            : '✅ Otomatik verme kapatıldı',
+                    };
+                    st.style.color = '#4CAF50';
+                    st.textContent = mesajlar[islem] || '✅ Tamamlandı';
+
+                    loadEtiket();
+                    loadRodeoRoles();
+                }
+            } catch (e) {
+                st.style.color = '#f74336';
+                st.textContent = '❌ ' + e.message;
+            }
+        }
+
         // ==================== ROL IZIN YONETIMI ====================
         let IZIN_TANIMLARI = [];
         let ROL_IZINLERI = new Set();
@@ -1755,6 +1924,7 @@
                     sel.innerHTML = d.guilds.map(g =>
                         `<option value="${g.id}">${g.name}</option>`).join('');
                     loadRodeoRoles();
+                    loadEtiket();
                 } else {
                     sel.innerHTML = '<option value="">Bot sunucuda değil</option>';
                 }
@@ -2341,6 +2511,7 @@
             refreshData().catch(e => console.error('Veriler yenilenemedi:', e));
             initRolePanel().catch(e => console.error('Rol paneli yuklenemedi:', e));
             loadMembers().catch(e => console.error('Uyeler yuklenemedi:', e));
+            loadEtiket().catch(e => console.error('Etiket yuklenemedi:', e));
             restartRefresh();
         }
 

@@ -686,6 +686,197 @@ def api_member_roles():
 
     return jsonify({'members': uyeler, 'total': guild.member_count})
 
+@app.route('/api/etiket', methods=['GET', 'POST'])
+def api_etiket():
+    """Sunucu etiketi (hoist rolu) yonetimi"""
+    bot = app.config.get('BOT')
+    if not bot:
+        return jsonify({'error': 'Bot not available'}), 500
+
+    if request.method == 'POST':
+        data = request.json or {}
+        guild_id = data.get('guild_id')
+        if not guild_id:
+            return jsonify({'error': 'Sunucu secilmedi'}), 400
+
+        try:
+            guild = resolve_guild(bot, str(guild_id))
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Gecersiz sunucu numarasi'}), 400
+
+        if not guild:
+            return jsonify({'error': 'Sunucu bulunamadi'}), 404
+
+        if not guild.me.guild_permissions.administrator and not guild.me.guild_permissions.manage_roles:
+            return jsonify({'error': 'Botta Rolleri Yonete izni yok'}), 403
+
+        async def uygula():
+            settings = await bot.db.get_settings(guild.id) or {}
+            rid = settings.get('sunucu_etiketi_role_id')
+            rol = guild.get_role(rid) if rid else None
+
+            islem = data.get('islem')
+
+            if islem == 'sil':
+                if not rol:
+                    return {'error': 'Silinecek etiket yok'}
+                if rol.managed:
+                    return {'error': 'Bu rol bir bot rolu - silinemez'}
+                try:
+                    await rol.delete(reason='Dashboard')
+                except discord.Forbidden:
+                    return {'error': 'Bot rolu etiketten yuksekte - silinemez'}
+                await bot.db.update_setting(guild.id, 'sunucu_etiketi_role_id', None)
+                await bot.db.update_setting(guild.id, 'sunucu_etiketi_otomatik', 0)
+                # Rodeo listesinden cikar
+                raw = (await bot.db.get_settings(guild.id) or {}).get('rodeo_rolleri')
+                if raw:
+                    import json as _j
+                    try:
+                        lst = [int(x) for x in _j.loads(raw)]
+                    except (ValueError, TypeError):
+                        lst = []
+                    if rol.id in lst:
+                        lst.remove(rol.id)
+                        await bot.db.update_setting(
+                            guild.id, 'rodeo_rolleri', _j.dumps(lst))
+                return {'success': True, 'action': 'sil'}
+
+            if islem == 'oto':
+                if not rol:
+                    return {'error': 'Once etiket olusturun'}
+                acik = 1 if data.get('acik') else 0
+                await bot.db.update_setting(guild.id, 'sunucu_etiketi_otomatik', acik)
+
+                # Rodeo listesine ekle/cikar
+                raw = (await bot.db.get_settings(guild.id) or {}).get('rodeo_rolleri')
+                import json as _j
+                try:
+                    lst = [int(x) for x in _j.loads(raw)] if raw else []
+                except (ValueError, TypeError):
+                    lst = []
+
+                if acik:
+                    if rol.position >= guild.me.top_role.position:
+                        return {'error': 'Etiket bot rolunden yuksekta - verilemez. '
+                                         'Once Yukari Tasiklar ile yukseltin.'}
+                    if rol.id not in lst:
+                        lst.append(rol.id)
+                        await bot.db.update_setting(
+                            guild.id, 'rodeo_rolleri', _j.dumps(lst))
+                else:
+                    if rol.id in lst:
+                        lst.remove(rol.id)
+                        await bot.db.update_setting(
+                            guild.id, 'rodeo_rolleri', _j.dumps(lst))
+
+                return {'success': True, 'action': 'oto', 'acik': bool(acik)}
+
+            if islem == 'yukari':
+                if not rol:
+                    return {'error': 'Once etiket olusturun'}
+                try:
+                    await rol.edit(position=guild.me.top_role.position - 1,
+                                   reason='Dashboard')
+                except discord.Forbidden:
+                    return {'error': 'Bot rolu etiketten yuksekte - tasinamaz'}
+                except discord.HTTPException as e:
+                    return {'error': f'Discord reddetti: {e}'}
+                return {'success': True, 'action': 'yukari'}
+
+            # --- Olustur / Guncelle ---
+            ad = (data.get('name') or '').strip()[:32] or '5005'
+            try:
+                color = discord.Color.from_str((data.get('color') or '#FFD700').strip())
+            except (ValueError, TypeError):
+                return {'error': 'Renk gecersiz. Ornek: #FF0000'}
+
+            if rol:
+                try:
+                    await rol.edit(name=ad, color=color, hoist=True,
+                                   reason='Dashboard')
+                except discord.Forbidden:
+                    return {'error': 'Rol duzenlenemedi (bot rolunden yuksekte)'}
+                await bot.db.update_setting(guild.id, 'sunucu_etiketi_role_id', rol.id)
+                return {'success': True, 'action': 'guncelle',
+                        'role': {'id': str(rol.id), 'name': ad,
+                                 'color': str(rol.color)}}
+
+            try:
+                yeni = await guild.create_role(name=ad, color=color, hoist=True,
+                                               reason='Sunucu etiketi')
+            except discord.Forbidden:
+                return {'error': 'Rol olusturulamadi - yetki yok'}
+            except discord.HTTPException as e:
+                return {'error': f'Discord reddetti: {e}'}
+
+            try:
+                await yeni.edit(position=guild.me.top_role.position - 1)
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+
+            await bot.db.update_setting(guild.id, 'sunucu_etiketi_role_id', yeni.id)
+
+            # Otomatik acikse rodeo listesine ekle
+            otomatik = (await bot.db.get_settings(guild.id) or {}).get('sunucu_etiketi_otomatik')
+            if otomatik:
+                raw = (await bot.db.get_settings(guild.id) or {}).get('rodeo_rolleri')
+                import json as _j
+                try:
+                    lst = [int(x) for x in _j.loads(raw)] if raw else []
+                except (ValueError, TypeError):
+                    lst = []
+                if yeni.id not in lst:
+                    lst.append(yeni.id)
+                    await bot.db.update_setting(
+                        guild.id, 'rodeo_rolleri', _j.dumps(lst))
+
+            return {'success': True, 'action': 'olustur',
+                    'role': {'id': str(yeni.id), 'name': ad, 'color': str(yeni.color)}}
+
+        result = run_async(uygula())
+        if 'error' in result:
+            return jsonify(result), 400
+        return jsonify(result)
+
+    # GET
+    guild_id = request.args.get('guild_id')
+    if not guild_id:
+        return jsonify({'error': 'Sunucu secilmedi'}), 400
+
+    try:
+        guild = resolve_guild(bot, guild_id)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Gecersiz sunucu numarasi'}), 400
+
+    if not guild:
+        return jsonify({'error': 'Sunucu bulunamadi'}), 404
+
+    async def load():
+        settings = await bot.db.get_settings(guild.id) or {}
+        rid = settings.get('sunucu_etiketi_role_id')
+        rol = guild.get_role(rid) if rid else None
+        return {
+            'var': rol is not None,
+            'otomatik': bool(settings.get('sunucu_etiketi_otomatik')),
+            'role': None if not rol else {
+                'id': str(rol.id),
+                'name': rol.name,
+                'color': f'#{rol.color.value:06X}',
+                'members': len(rol.members),
+                'position': rol.position,
+                'hoist': rol.hoist,
+                'assignable': rol.position < guild.me.top_role.position,
+            },
+            'bot_top_position': guild.me.top_role.position,
+            'total_members': guild.member_count,
+        }
+
+    try:
+        return jsonify(run_async(load()))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/roller', methods=['GET', 'POST'])
 def api_roller():
     """Rodeo (girise otomatik rol) ayarlari - dashboard uzerinden"""
